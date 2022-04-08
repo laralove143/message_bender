@@ -1,0 +1,30 @@
+[package]
+name = "edit-any-message-discord-bot"
+description = "a discord bot that lets you edit other people's messages"
+repository = "https://github.com/laralove143/edit-any-message-discord-bot"
+version = "0.1.0"
+keywords = ["discord"]
+categories = ["http-client"]
+authors = ["laralove143 <laralove143@icloud.com>"]
+license = "MIT"
+edition = "2021"
+
+[dependencies]
+twilight-gateway = { version = "0.10", default-features = false, features = [
+    "rustls-native-roots",
+    "zlib-simd",
+] }
+twilight-http = { version = "0.10", default-features = false, features = [
+    "decompression",
+    "rustls-native-roots",
+    "trust-dns",
+] }
+twilight-model = { version = "0.10", default-features = false, features = [
+] }
+twilight-cache-inmemory = { version = "0.10", default-features = false, features = [
+    "permission-calculator"
+] }
+
+tokio = { version = "1.17.0", default-features = false, features = ["rt-multi-thread", "macros"] }
+futures-util = "0.3.21"
+anyhow = "1.0"
