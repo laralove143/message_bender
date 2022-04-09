@@ -115,9 +115,13 @@ async fn main() -> Result<()> {
         .await?
         .id;
 
-    http.interaction(application_id)
-        .set_global_commands(&[])
-        .exec()
+    let interaction_client = http.interaction(application_id);
+    let commands = [];
+    test_guild_id
+        .map_or_else(
+            || interaction_client.set_global_commands(&[]).exec(),
+            |id| interaction_client.set_guild_commands(id, &commands).exec(),
+        )
         .await?;
 
     let cache = InMemoryCache::builder()
