@@ -90,9 +90,10 @@ impl Context {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let intents = Intents::empty();
-    let event_types = EventTypeFlags::INTERACTION_CREATE;
-    let resource_types = ResourceType::empty();
+    // todo: add tracing
+    let intents = Intents::MESSAGE_CONTENT | Intents::GUILD_MESSAGES;
+    let event_types = EventTypeFlags::INTERACTION_CREATE | EventTypeFlags::GUILD_MESSAGES;
+    let resource_types = ResourceType::MESSAGE;
 
     let test_guild_id: Option<Id<GuildMarker>> = env::var("TEST_GUILD_ID")
         .ok()
@@ -124,6 +125,7 @@ async fn main() -> Result<()> {
 
     let cache = InMemoryCache::builder()
         .resource_types(resource_types)
+        .message_cache_size(25)
         .build();
 
     let ctx = Context(Arc::new(ContextInner {
