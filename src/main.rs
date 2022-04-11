@@ -65,7 +65,14 @@ impl Context {
             .create_message(
                 self.http
                     .create_private_channel(
-                        self.http.current_user().exec().await?.model().await?.id,
+                        self.http
+                            .current_user_application()
+                            .exec()
+                            .await?
+                            .model()
+                            .await?
+                            .owner
+                            .id,
                     )
                     .exec()
                     .await?
