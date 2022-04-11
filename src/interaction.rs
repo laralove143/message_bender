@@ -59,4 +59,19 @@ impl Context {
 
         Ok(())
     }
+
+    pub async fn create_commands(
+        &self,
+        test_guild_id: Option<Id<GuildMarker>>,
+    ) -> Result<(), anyhow::Error> {
+        let interaction_client = self.http.interaction(self.application_id);
+        let commands = [Edit::create_command().into()];
+        match test_guild_id {
+            Some(id) => interaction_client.set_guild_commands(id, &commands).exec(),
+            None => interaction_client.set_global_commands(&commands).exec(),
+        }
+        .await?;
+
+        Ok(())
+    }
 }

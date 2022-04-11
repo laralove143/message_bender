@@ -115,15 +115,6 @@ async fn main() -> Result<()> {
         .await?
         .id;
 
-    let interaction_client = http.interaction(application_id);
-    let commands = [];
-    test_guild_id
-        .map_or_else(
-            || interaction_client.set_global_commands(&[]).exec(),
-            |id| interaction_client.set_guild_commands(id, &commands).exec(),
-        )
-        .await?;
-
     let cache = InMemoryCache::builder()
         .resource_types(resource_types)
         .build();
@@ -133,6 +124,8 @@ async fn main() -> Result<()> {
         cache,
         application_id,
     }));
+
+    ctx.create_commands(test_guild_id).await?;
 
     while let Some((_, event)) = events.next().await {
         ctx.cache.update(&event);
