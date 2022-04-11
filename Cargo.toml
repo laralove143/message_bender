@@ -28,4 +28,5 @@ twilight-interactions = "0.10"
 
 tokio = { version = "1.17.0", default-features = false, features = ["rt-multi-thread", "macros"] }
 futures-util = "0.3.21"
-anyhow = "1.0"
+anyhow = { git = "https://github.com/laralove143/anyhow" }
+thiserror = "1.0"
