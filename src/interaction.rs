@@ -1,12 +1,41 @@
 mod edit;
 
 use anyhow::{bail, Result};
+use thiserror::Error;
+use twilight_interactions::command::CreateCommand;
 use twilight_model::{
     application::interaction::Interaction,
+    channel::message::MessageFlags,
     http::interaction::{InteractionResponse, InteractionResponseType},
+    id::{marker::GuildMarker, Id},
 };
+use twilight_util::builder::InteractionResponseDataBuilder;
 
-use crate::Context;
+use crate::{interaction::edit::Edit, Context};
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error(
+        "i dont know any messages here yet.. i can only see messages sent after i joined.. sorry!"
+    )]
+    NoCachedMessages,
+    #[error("an error happened :( i let my developer know hopefully they'll fix it soon!")]
+    Other(#[from] anyhow::Error),
+}
+
+impl Error {
+    fn response(self) -> InteractionResponse {
+        InteractionResponse {
+            kind: InteractionResponseType::ChannelMessageWithSource,
+            data: Some(
+                InteractionResponseDataBuilder::new()
+                    .content(self.to_string())
+                    .flags(MessageFlags::EPHEMERAL)
+                    .build(),
+            ),
+        }
+    }
+}
 
 impl Context {
     pub async fn handle_interaction(&self, interaction: Interaction) -> Result<()> {
