@@ -39,8 +39,6 @@ impl Error {
 
 impl Context {
     pub async fn handle_interaction(&self, interaction: Interaction) -> Result<()> {
-        let client = self.http.interaction(self.application_id);
-
         let command = if let Interaction::ApplicationCommand(cmd) = interaction {
             *cmd
         } else {
@@ -50,17 +48,12 @@ impl Context {
         let response = match command.data.name.as_str() {
             "edit" => self.handle_edit_command(&command).await,
             _ => bail!("unknown command: {command:#?}"),
-        };
+        }
+        .unwrap_or_else(Error::response);
 
-        client
-            .create_response(
-                command.id,
-                &command.token,
-                &InteractionResponse {
-                    kind: InteractionResponseType::ChannelMessageWithSource,
-                    data: Some(response_data),
-                },
-            )
+        self.http
+            .interaction(self.application_id)
+            .create_response(command.id, &command.token, &response)
             .exec()
             .await?;
 
