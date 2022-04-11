@@ -1,3 +1,5 @@
+mod edit;
+
 use anyhow::{bail, Result};
 use twilight_model::{
     application::interaction::Interaction,
@@ -16,7 +18,8 @@ impl Context {
             bail!("unknown interaction: {interaction:#?}");
         };
 
-        let response_data = match command.data.name.as_str() {
+        let response = match command.data.name.as_str() {
+            "edit" => self.handle_edit_command(&command).await,
             _ => bail!("unknown command: {command:#?}"),
         };
 
