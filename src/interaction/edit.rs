@@ -1,4 +1,5 @@
-use anyhow::Ok as _;
+use anyhow::Ok;
+use thiserror::Error;
 use twilight_interactions::command::{CommandModel, CreateCommand};
 use twilight_model::{
     application::{
@@ -6,18 +7,27 @@ use twilight_model::{
         interaction::ApplicationCommand,
     },
     channel::message::MessageFlags,
+    guild::Permissions,
     http::interaction::{InteractionResponse, InteractionResponseType},
 };
 use twilight_util::builder::InteractionResponseDataBuilder;
 
-use crate::{interaction::Error, Context};
+use crate::Context;
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error(
+        "i dont know any messages here yet.. i can only see messages sent after i joined.. sorry!"
+    )]
+    NoCachedMessages,
+}
 
 #[derive(CreateCommand, CommandModel)]
 #[command(name = "edit", desc = "edit any message you select")]
 pub struct Edit {}
 
 impl Context {
-    pub async fn handle_edit_command(
+    pub fn handle_edit_command(
         &self,
         command: &ApplicationCommand,
     ) -> Result<InteractionResponse, anyhow::Error> {
@@ -31,7 +41,7 @@ impl Context {
         for id in self
             .cache
             .channel_messages(command.channel_id)
-            .ok_or(Error::NoCachedMessages)?
+            .ok_or(super::Error::Edit(Error::NoCachedMessages))?
         {
             let message = self.cache.message(id).ok()?;
             let content = message.content();

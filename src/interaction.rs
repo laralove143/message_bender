@@ -6,35 +6,23 @@ use twilight_interactions::command::CreateCommand;
 use twilight_model::{
     application::interaction::Interaction,
     channel::message::MessageFlags,
+    guild::Permissions,
     http::interaction::{InteractionResponse, InteractionResponseType},
-    id::{marker::GuildMarker, Id},
+    id::{
+        marker::{ChannelMarker, GuildMarker, UserMarker},
+        Id,
+    },
 };
 use twilight_util::builder::InteractionResponseDataBuilder;
 
 use crate::{interaction::edit::Edit, Context};
 
 #[derive(Error, Debug)]
-pub enum Error {
-    #[error(
-        "i dont know any messages here yet.. i can only see messages sent after i joined.. sorry!"
-    )]
-    NoCachedMessages,
-    #[error("an error happened :( i let my developer know hopefully they'll fix it soon!")]
-    Other(#[from] anyhow::Error),
-}
-
-impl Error {
-    fn response(&self) -> InteractionResponse {
-        InteractionResponse {
-            kind: InteractionResponseType::ChannelMessageWithSource,
-            data: Some(
-                InteractionResponseDataBuilder::new()
-                    .content(self.to_string())
-                    .flags(MessageFlags::EPHEMERAL)
-                    .build(),
-            ),
-        }
-    }
+enum Error {
+    #[error("{0}")]
+    Edit(#[from] edit::Error),
+    #[error("you need these permissions for that: ```{0:#?}```")]
+    UserMissingPermissions(Permissions),
 }
 
 impl Context {
@@ -46,7 +34,7 @@ impl Context {
         };
 
         match match command.data.name.as_str() {
-            "edit" => self.handle_edit_command(&command).await,
+            "edit" => self.handle_edit_command(&command),
             _ => return Err(anyhow!("unknown command: {command:#?}")),
         } {
             Ok(response) => {
@@ -55,16 +43,55 @@ impl Context {
                     .create_response(command.id, &command.token, &response)
                     .exec()
                     .await?;
+
                 Ok(())
             }
             Err(err) => {
-                self.http
-                    .interaction(self.application_id)
-                    .create_response(command.id, &command.token, &err.response())
-                    .exec()
-                    .await?;
+                if let Some(user_err) = err.downcast_ref::<Error>() {
+                    self.http
+                        .interaction(self.application_id)
+                        .create_response(
+                            command.id,
+                            &command.token,
+                            &InteractionResponse {
+                                kind: InteractionResponseType::ChannelMessageWithSource,
+                                data: Some(
+                                    InteractionResponseDataBuilder::new()
+                                        .content(user_err.to_string())
+                                        .flags(MessageFlags::EPHEMERAL)
+                                        .build(),
+                                ),
+                            },
+                        )
+                        .exec()
+                        .await?;
 
-                Err(err.into())
+                    Ok(())
+                } else {
+                    self.http
+                        .interaction(self.application_id)
+                        .create_response(
+                            command.id,
+                            &command.token,
+                            &InteractionResponse {
+                                kind: InteractionResponseType::ChannelMessageWithSource,
+                                data: Some(
+                                    InteractionResponseDataBuilder::new()
+                                        .content(
+                                            "an error happened :( i let my developer know \
+                                             hopefully they'll fix it soon!"
+                                                .to_owned(),
+                                        )
+                                        .flags(MessageFlags::EPHEMERAL)
+                                        .build(),
+                                ),
+                            },
+                        )
+                        .exec()
+                        .await?;
+
+                    Err(err)
+                }
             }
         }
     }
