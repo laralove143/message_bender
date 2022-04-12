@@ -21,7 +21,7 @@ use crate::{interaction::edit::Edit, Context};
 enum Error {
     #[error("{0}")]
     Edit(#[from] edit::Error),
-    #[error("you need these permissions for that: ```{0:#?}```")]
+    #[error("you need these permissions for that:\n**{}**", format!("{:#?}", .0).to_lowercase().replace('_', " "))]
     UserMissingPermissions(Permissions),
 }
 
