@@ -55,9 +55,9 @@ impl Context {
             Event::InteractionCreate(interaction) => self.handle_interaction(interaction.0).await,
             _ => Ok(()),
         } {
-            error!("{err:#?}");
+            error!("{err:?}");
             if let Err(e) = self.inform_error().await {
-                error!("when informing owner: {e:#?}");
+                error!("when informing owner: {e:?}");
             }
         }
     }
