@@ -20,8 +20,13 @@ impl Context {
     pub async fn handle_edit_command(
         &self,
         command: &ApplicationCommand,
-    ) -> Result<InteractionResponse, Error> {
-        // todo: check for manage messages permissions for the member
+    ) -> Result<InteractionResponse, anyhow::Error> {
+        self.check_permissions(
+            command.member.as_ref().ok()?.user.as_ref().ok()?.id,
+            command.channel_id,
+            Permissions::MANAGE_MESSAGES,
+        )?;
+
         let mut message_options: Vec<SelectMenuOption> = Vec::with_capacity(25);
         for id in self
             .cache
