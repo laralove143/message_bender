@@ -1,6 +1,6 @@
 mod edit;
 
-use anyhow::{bail, Result};
+use anyhow::bail;
 use thiserror::Error;
 use twilight_interactions::command::CreateCommand;
 use twilight_model::{
@@ -24,7 +24,7 @@ pub enum Error {
 }
 
 impl Error {
-    fn response(self) -> InteractionResponse {
+    fn response(&self) -> InteractionResponse {
         InteractionResponse {
             kind: InteractionResponseType::ChannelMessageWithSource,
             data: Some(
@@ -38,26 +38,35 @@ impl Error {
 }
 
 impl Context {
-    pub async fn handle_interaction(&self, interaction: Interaction) -> Result<()> {
+    pub async fn handle_interaction(&self, interaction: Interaction) -> Result<(), anyhow::Error> {
         let command = if let Interaction::ApplicationCommand(cmd) = interaction {
             *cmd
         } else {
             bail!("unknown interaction: {interaction:#?}");
         };
 
-        let response = match command.data.name.as_str() {
+        match match command.data.name.as_str() {
             "edit" => self.handle_edit_command(&command).await,
             _ => bail!("unknown command: {command:#?}"),
+        } {
+            Ok(response) => {
+                self.http
+                    .interaction(self.application_id)
+                    .create_response(command.id, &command.token, &response)
+                    .exec()
+                    .await?;
+                Ok(())
+            }
+            Err(err) => {
+                self.http
+                    .interaction(self.application_id)
+                    .create_response(command.id, &command.token, &err.response())
+                    .exec()
+                    .await?;
+
+                Err(err.into())
+            }
         }
-        .unwrap_or_else(Error::response);
-
-        self.http
-            .interaction(self.application_id)
-            .create_response(command.id, &command.token, &response)
-            .exec()
-            .await?;
-
-        Ok(())
     }
 
     pub async fn create_commands(
