@@ -13,6 +13,12 @@ use std::{env, ops::Deref, sync::Arc};
 
 use anyhow::Result;
 use futures_util::StreamExt;
+use tracing_log::{log::error, LogTracer};
+use tracing_subscriber::{
+    filter::{LevelFilter, Targets},
+    util::SubscriberInitExt,
+    EnvFilter,
+};
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 use twilight_gateway::{Cluster, EventTypeFlags};
 use twilight_http::Client;
@@ -53,9 +59,9 @@ impl Context {
             Event::InteractionCreate(interaction) => self.handle_interaction(interaction.0).await,
             _ => Ok(()),
         } {
-            eprintln!("{err}");
+            error!("{err:#?}");
             if let Err(e) = self.inform_error().await {
-                eprintln!("error when informing owner: {e}");
+                error!("when informing owner: {e:#?}");
             }
         }
     }
@@ -90,7 +96,7 @@ impl Context {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // todo: add tracing
+    // todo: use simd
     let intents = Intents::MESSAGE_CONTENT | Intents::GUILD_MESSAGES;
     let event_types = EventTypeFlags::INTERACTION_CREATE | EventTypeFlags::GUILD_MESSAGES;
     let resource_types = ResourceType::MESSAGE;
@@ -99,6 +105,10 @@ async fn main() -> Result<()> {
         .ok()
         .and_then(|id| id.parse().ok())
         .map(Id::new);
+
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
 
     let token = env::var(if test_guild_id.is_some() {
         "TEST_BOT_TOKEN"

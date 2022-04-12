@@ -13,20 +13,21 @@ edition = "2021"
 twilight-gateway = { version = "0.10", default-features = false, features = [
     "rustls-native-roots",
     "zlib-simd",
+    "tracing"
 ] }
-twilight-http = { version = "0.10", default-features = false, features = [
-    "decompression",
-    "rustls-native-roots",
+twilight-http = { version = "0.10", features = [
     "trust-dns",
 ] }
-twilight-model = { version = "0.10", default-features = false }
+twilight-model = { version = "0.10" }
 twilight-cache-inmemory = { version = "0.10", features = [
     "permission-calculator"
 ] }
 twilight-util = { version = "0.10", features = ["builder"] }
 twilight-interactions = "0.10"
 
-tokio = { version = "1.17.0", default-features = false, features = ["rt-multi-thread", "macros"] }
-futures-util = "0.3.21"
+tokio = { version = "1.17", features = ["rt-multi-thread", "macros"] }
+futures-util = "0.3"
+tracing-log = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = { git = "https://github.com/laralove143/anyhow" }
 thiserror = "1.0"
