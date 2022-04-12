@@ -9,16 +9,12 @@
 
 mod interaction;
 
-use std::{env, ops::Deref, sync::Arc};
+use std::{env, fs::File, ops::Deref, sync::Arc};
 
 use anyhow::Result;
 use futures_util::StreamExt;
-use tracing_log::{log::error, LogTracer};
-use tracing_subscriber::{
-    filter::{LevelFilter, Targets},
-    util::SubscriberInitExt,
-    EnvFilter,
-};
+use tracing_log::log::error;
+use tracing_subscriber::EnvFilter;
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 use twilight_gateway::{Cluster, EventTypeFlags};
 use twilight_http::Client;
@@ -106,15 +102,19 @@ async fn main() -> Result<()> {
         .and_then(|id| id.parse().ok())
         .map(Id::new);
 
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
-
-    let token = env::var(if test_guild_id.is_some() {
-        "TEST_BOT_TOKEN"
+    let token = if test_guild_id.is_some() {
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .init();
+        env::var("TEST_BOT_TOKEN")?
     } else {
-        "EDIT_BOT_TOKEN"
-    })?;
+        tracing_subscriber::fmt()
+            .with_writer(File::create("edit_logs.txt")?)
+            .with_ansi(false)
+            .with_env_filter(EnvFilter::from_default_env())
+            .init();
+        env::var("EDIT_BOT_TOKEN")?
+    };
 
     let (cluster, mut events) = Cluster::builder(token.clone(), intents)
         .event_types(event_types)
