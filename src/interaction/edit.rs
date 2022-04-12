@@ -31,8 +31,14 @@ impl Context {
             let message = self.cache.message(id).ok()?;
             let content = message.content();
             message_options.push(SelectMenuOption {
-                // todo: check for valid labels
-                label: content.get(0..100).unwrap_or(content).to_owned(),
+                label: content
+                    .get(0..100)
+                    .or_else(|| content.get(0..99))
+                    .or_else(|| content.get(0..98))
+                    .or_else(|| content.get(0..97))
+                    .or_else(|| content.get(0..96))
+                    .unwrap_or(content)
+                    .to_owned(),
                 value: id.to_string(),
                 default: false,
                 description: None,
