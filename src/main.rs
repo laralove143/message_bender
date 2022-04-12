@@ -11,7 +11,6 @@ mod interaction;
 
 use std::{env, fs::File, ops::Deref, sync::Arc};
 
-use anyhow::Result;
 use futures_util::StreamExt;
 use tracing_log::log::error;
 use tracing_subscriber::EnvFilter;
@@ -62,7 +61,7 @@ impl Context {
         }
     }
 
-    async fn inform_error(&self) -> Result<()> {
+    async fn inform_error(&self) -> Result<(), anyhow::Error> {
         self.http
             .create_message(
                 self.http
@@ -91,7 +90,7 @@ impl Context {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), anyhow::Error> {
     // todo: use simd
     let intents = Intents::MESSAGE_CONTENT | Intents::GUILD_MESSAGES;
     let event_types = EventTypeFlags::INTERACTION_CREATE | EventTypeFlags::GUILD_MESSAGES;

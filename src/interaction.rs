@@ -1,6 +1,6 @@
 mod edit;
 
-use anyhow::bail;
+use anyhow::anyhow;
 use thiserror::Error;
 use twilight_interactions::command::CreateCommand;
 use twilight_model::{
@@ -42,12 +42,12 @@ impl Context {
         let command = if let Interaction::ApplicationCommand(cmd) = interaction {
             *cmd
         } else {
-            bail!("unknown interaction: {interaction:#?}");
+            return Err(anyhow!("unknown interaction: {interaction:#?}"));
         };
 
         match match command.data.name.as_str() {
             "edit" => self.handle_edit_command(&command).await,
-            _ => bail!("unknown command: {command:#?}"),
+            _ => return Err(anyhow!("unknown command: {command:#?}")),
         } {
             Ok(response) => {
                 self.http
