@@ -96,6 +96,22 @@ impl Context {
         }
     }
 
+    fn check_permissions(
+        &self,
+        user_id: Id<UserMarker>,
+        channel_id: Id<ChannelMarker>,
+        required: Permissions,
+    ) -> Result<(), anyhow::Error> {
+        let missing_permissions =
+            required - self.cache.permissions().in_channel(user_id, channel_id)?;
+
+        if missing_permissions.is_empty() {
+            Ok(())
+        } else {
+            Err(Error::UserMissingPermissions(missing_permissions).into())
+        }
+    }
+
     pub async fn create_commands(
         &self,
         test_guild_id: Option<Id<GuildMarker>>,
