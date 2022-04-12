@@ -4,7 +4,8 @@
     clippy::missing_docs_in_private_items,
     clippy::implicit_return,
     clippy::multiple_inherent_impl,
-    clippy::missing_errors_doc
+    clippy::missing_errors_doc,
+    clippy::pattern_type_mismatch
 )]
 
 mod interaction;
@@ -18,9 +19,11 @@ use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 use twilight_gateway::{Cluster, EventTypeFlags};
 use twilight_http::Client;
 use twilight_model::{
-    gateway::{event::Event, Intents},
+    gateway::{
+        event::Event, payload::outgoing::request_guild_members::RequestGuildMembersBuilder, Intents,
+    },
     id::{
-        marker::{ApplicationMarker, GuildMarker},
+        marker::{ApplicationMarker, GuildMarker, UserMarker},
         Id,
     },
 };
@@ -29,6 +32,7 @@ pub struct ContextInner {
     http: Client,
     cache: InMemoryCache,
     application_id: Id<ApplicationMarker>,
+    user_id: Id<UserMarker>,
 }
 
 pub struct Context(Arc<ContextInner>);
@@ -91,15 +95,24 @@ impl Context {
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    // todo: use simd
-    let intents = Intents::MESSAGE_CONTENT | Intents::GUILD_MESSAGES;
-    let event_types = EventTypeFlags::INTERACTION_CREATE | EventTypeFlags::GUILD_MESSAGES;
-    let resource_types = ResourceType::MESSAGE;
+    let intents = Intents::MESSAGE_CONTENT
+        | Intents::GUILD_MESSAGES
+        | Intents::GUILDS
+        | Intents::GUILD_MEMBERS;
+    let event_types = EventTypeFlags::INTERACTION_CREATE
+        | EventTypeFlags::GUILD_MESSAGES
+        | EventTypeFlags::GUILDS
+        | EventTypeFlags::GUILD_MEMBERS
+        | EventTypeFlags::MEMBER_CHUNK;
+    let resource_types = ResourceType::MESSAGE
+        | ResourceType::GUILD
+        | ResourceType::CHANNEL
+        | ResourceType::MEMBER
+        | ResourceType::ROLE;
 
     let test_guild_id: Option<Id<GuildMarker>> = env::var("TEST_GUILD_ID")
         .ok()
-        .and_then(|id| id.parse().ok())
-        .map(Id::new);
+        .and_then(|id| id.parse().ok());
 
     let token = if test_guild_id.is_some() {
         tracing_subscriber::fmt()
@@ -119,7 +132,9 @@ async fn main() -> Result<(), anyhow::Error> {
         .event_types(event_types)
         .build()
         .await?;
-    let cluster_spawn = Arc::new(cluster);
+    let cluster_arc = Arc::new(cluster);
+
+    let cluster_spawn = Arc::clone(&cluster_arc);
     tokio::spawn(async move { cluster_spawn.up().await });
 
     let http = Client::new(token);
@@ -131,6 +146,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .model()
         .await?
         .id;
+    let user_id = http.current_user().exec().await?.model().await?.id;
 
     let cache = InMemoryCache::builder()
         .resource_types(resource_types)
@@ -141,12 +157,24 @@ async fn main() -> Result<(), anyhow::Error> {
         http,
         cache,
         application_id,
+        user_id,
     }));
 
     ctx.create_commands(test_guild_id).await?;
 
-    while let Some((_, event)) = events.next().await {
+    while let Some((shard_id, event)) = events.next().await {
         ctx.cache.update(&event);
+        if let Event::GuildCreate(guild) = &event {
+            if let Err(err) = cluster_arc
+                .command(
+                    shard_id,
+                    &RequestGuildMembersBuilder::new(guild.id).query("", None),
+                )
+                .await
+            {
+                error!("{err:?}");
+            }
+        }
         tokio::spawn(ctx.clone().handle_event(event));
     }
 
