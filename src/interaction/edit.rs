@@ -93,7 +93,7 @@ impl Edit {
                     .content("please select the message you want to edit".to_owned())
                     .components([Component::ActionRow(ActionRow {
                         components: vec![Component::SelectMenu(SelectMenu {
-                            custom_id: "message".to_owned(),
+                            custom_id: "selected_message".to_owned(),
                             options: message_options,
                             placeholder: Some("message to edit".to_owned()),
                             disabled: false,
