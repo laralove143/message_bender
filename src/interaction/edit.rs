@@ -47,7 +47,7 @@ impl Context {
 impl Edit {
     pub fn handle_command(
         &self,
-        command: &ApplicationCommand,
+        command: ApplicationCommand,
     ) -> Result<InteractionResponse, anyhow::Error> {
         self.check_permissions(
             command.member.as_ref().ok()?.user.as_ref().ok()?.id,
