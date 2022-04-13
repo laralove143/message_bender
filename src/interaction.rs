@@ -21,8 +21,12 @@ use crate::{interaction::edit::Edit, Context};
 enum Error {
     #[error("{0}")]
     Edit(#[from] edit::Error),
-    #[error("you need these permissions for that:\n**{}**", format!("{:#?}", .0).to_lowercase().replace('_', " "))]
+    #[error("you don't have these required permissions:\n**{}**",
+    format!("{:#?}", .0).to_lowercase().replace('_', " "))]
     UserMissingPermissions(Permissions),
+    #[error("please give me these permissions first:\n**{}**",
+    format!("{:#?}", .0).to_lowercase().replace('_', " "))]
+    SelfMissingPermissions(Permissions),
 }
 
 impl Context {
@@ -109,6 +113,24 @@ impl Context {
             Ok(())
         } else {
             Err(Error::UserMissingPermissions(missing_permissions).into())
+        }
+    }
+
+    fn check_self_permissions(
+        &self,
+        channel_id: Id<ChannelMarker>,
+        required: Permissions,
+    ) -> Result<(), anyhow::Error> {
+        let missing_permissions = required
+            - self
+                .cache
+                .permissions()
+                .in_channel(self.user_id, channel_id)?;
+
+        if missing_permissions.is_empty() {
+            Ok(())
+        } else {
+            Err(Error::SelfMissingPermissions(missing_permissions).into())
         }
     }
 
