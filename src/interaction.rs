@@ -30,21 +30,32 @@ enum Error {
 }
 
 impl Context {
+    #[allow(clippy::wildcard_enum_match_arm)]
     pub async fn handle_interaction(&self, interaction: Interaction) -> Result<(), anyhow::Error> {
-        let command = if let Interaction::ApplicationCommand(cmd) = interaction {
-            *cmd
-        } else {
-            return Err(anyhow!("unknown interaction: {interaction:#?}"));
+        let (id, token, result) = match interaction {
+            Interaction::ApplicationCommand(mut cmd) => {
+                (cmd.id, mem::take(&mut cmd.token), self.handle_command(*cmd))
+            }
+            Interaction::MessageComponent(mut component) => (
+                component.id,
+                mem::take(&mut component.token),
+                self.handle_component(*component),
+            ),
+            Interaction::ModalSubmit(mut modal) => (
+                modal.id,
+                mem::take(&mut modal.token),
+                self.handle_modal_submit(*modal),
+            ),
+            _ => {
+                return Err(anyhow!("unknown interaction: {interaction:#?}"));
+            }
         };
 
-        match match command.data.name.as_str() {
-            "edit" => self.handle_edit_command(&command),
-            _ => return Err(anyhow!("unknown command: {command:#?}")),
-        } {
+        match result {
             Ok(response) => {
                 self.http
                     .interaction(self.application_id)
-                    .create_response(command.id, &command.token, &response)
+                    .create_response(id, &token, &response)
                     .exec()
                     .await?;
 
@@ -55,8 +66,8 @@ impl Context {
                     self.http
                         .interaction(self.application_id)
                         .create_response(
-                            command.id,
-                            &command.token,
+                            id,
+                            &token,
                             &InteractionResponse {
                                 kind: InteractionResponseType::ChannelMessageWithSource,
                                 data: Some(
@@ -75,8 +86,8 @@ impl Context {
                     self.http
                         .interaction(self.application_id)
                         .create_response(
-                            command.id,
-                            &command.token,
+                            id,
+                            &token,
                             &InteractionResponse {
                                 kind: InteractionResponseType::ChannelMessageWithSource,
                                 data: Some(
@@ -100,7 +111,37 @@ impl Context {
         }
     }
 
-    fn check_permissions(
+    fn handle_command(
+        &self,
+        command: ApplicationCommand,
+    ) -> Result<InteractionResponse, anyhow::Error> {
+        match command.data.name.as_str() {
+            "edit" => self.edit_runner().handle_command(command),
+            _ => Err(anyhow!("unknown command: {command:#?}")),
+        }
+    }
+
+    fn handle_component(
+        &self,
+        component: MessageComponentInteraction,
+    ) -> Result<InteractionResponse, anyhow::Error> {
+        match component.data.custom_id.as_str() {
+            "selected_message" => self.edit_runner().handle_message_select(component),
+            _ => Err(anyhow!("unknown component: {component:#?}")),
+        }
+    }
+
+    fn handle_modal_submit(
+        &self,
+        modal: ModalSubmitInteraction,
+    ) -> Result<InteractionResponse, anyhow::Error> {
+        match modal.data.custom_id.as_str() {
+            "edit_modal" => self.edit_runner().handle_modal_submit(modal),
+            _ => Err(anyhow!("unknown modal: {modal:#?}")),
+        }
+    }
+
+    fn check_user_permissions(
         &self,
         user_id: Id<UserMarker>,
         channel_id: Id<ChannelMarker>,
