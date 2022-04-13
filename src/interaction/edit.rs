@@ -67,6 +67,9 @@ impl Edit {
         {
             let message = self.cache.message(id).ok()?;
             let content = message.content();
+            if content.len() > 2000 {
+                continue;
+            }
             message_options.push(SelectMenuOption {
                 label: content
                     .get(0..100)
