@@ -1,10 +1,15 @@
+use std::ops::Deref;
+
 use anyhow::Ok;
 use thiserror::Error;
 use twilight_interactions::command::{CommandModel, CreateCommand};
 use twilight_model::{
     application::{
-        component::{select_menu::SelectMenuOption, ActionRow, Component, SelectMenu},
-        interaction::ApplicationCommand,
+        component::{
+            select_menu::SelectMenuOption, text_input::TextInputStyle, ActionRow, Component,
+            SelectMenu, TextInput,
+        },
+        interaction::{ApplicationCommand, MessageComponentInteraction},
     },
     channel::message::MessageFlags,
     guild::Permissions,
@@ -102,6 +107,38 @@ impl Edit {
                         })],
                     })])
                     .flags(MessageFlags::EPHEMERAL)
+                    .build(),
+            ),
+        })
+    }
+
+    pub fn handle_message_select(
+        &self,
+        mut component: MessageComponentInteraction,
+    ) -> Result<InteractionResponse, anyhow::Error> {
+        let selected_message = self
+            .cache
+            .message(component.data.values.pop().ok()?.parse()?)
+            .ok()?;
+
+        Ok(InteractionResponse {
+            kind: InteractionResponseType::Modal,
+            data: Some(
+                InteractionResponseDataBuilder::new()
+                    .title("edit message".to_owned())
+                    .custom_id("edit_modal".to_owned())
+                    .components([Component::ActionRow(ActionRow {
+                        components: vec![Component::TextInput(TextInput {
+                            custom_id: "new_content".to_owned(),
+                            label: "what to edit the message to".to_owned(),
+                            style: TextInputStyle::Paragraph,
+                            value: Some(selected_message.content().to_owned()),
+                            max_length: Some(2001),
+                            min_length: None,
+                            placeholder: None,
+                            required: None,
+                        })],
+                    })])
                     .build(),
             ),
         })
