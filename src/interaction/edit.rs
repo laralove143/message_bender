@@ -49,8 +49,12 @@ impl Edit {
         &self,
         command: ApplicationCommand,
     ) -> Result<InteractionResponse, anyhow::Error> {
-        self.check_permissions(
-            command.member.as_ref().ok()?.user.as_ref().ok()?.id,
+        self.check_self_permissions(
+            command.channel_id,
+            Permissions::MANAGE_MESSAGES | Permissions::MANAGE_WEBHOOKS,
+        )?;
+        self.check_user_permissions(
+            command.member.ok()?.user.ok()?.id,
             command.channel_id,
             Permissions::MANAGE_MESSAGES,
         )?;
