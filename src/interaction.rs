@@ -1,10 +1,14 @@
 mod edit;
 
+use std::mem;
+
 use anyhow::anyhow;
 use thiserror::Error;
 use twilight_interactions::command::CreateCommand;
 use twilight_model::{
-    application::interaction::Interaction,
+    application::interaction::{
+        modal::ModalSubmitInteraction, ApplicationCommand, Interaction, MessageComponentInteraction,
+    },
     channel::message::MessageFlags,
     guild::Permissions,
     http::interaction::{InteractionResponse, InteractionResponseType},
@@ -15,7 +19,7 @@ use twilight_model::{
 };
 use twilight_util::builder::InteractionResponseDataBuilder;
 
-use crate::{interaction::edit::Edit, Context};
+use crate::Context;
 
 #[derive(Error, Debug)]
 enum Error {
@@ -180,7 +184,7 @@ impl Context {
         test_guild_id: Option<Id<GuildMarker>>,
     ) -> Result<(), anyhow::Error> {
         let interaction_client = self.http.interaction(self.application_id);
-        let commands = [Edit::create_command().into()];
+        let commands = [edit::Command::create_command().into()];
         match test_guild_id {
             Some(id) => interaction_client.set_guild_commands(id, &commands).exec(),
             None => interaction_client.set_global_commands(&commands).exec(),

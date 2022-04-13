@@ -24,10 +24,28 @@ pub enum Error {
 
 #[derive(CreateCommand, CommandModel)]
 #[command(name = "edit", desc = "edit any message you select")]
-pub struct Edit {}
+pub struct Command {}
+
+pub struct Edit(Context);
+
+impl Deref for Edit {
+    type Target = Context;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 impl Context {
-    pub fn handle_edit_command(
+    #[must_use]
+    pub fn edit_runner(&self) -> Edit {
+        // todo: dont do this
+        Edit(self.clone())
+    }
+}
+
+impl Edit {
+    pub fn handle_command(
         &self,
         command: &ApplicationCommand,
     ) -> Result<InteractionResponse, anyhow::Error> {
