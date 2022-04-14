@@ -120,7 +120,7 @@ impl Context {
         command: ApplicationCommand,
     ) -> Result<InteractionResponse, anyhow::Error> {
         match command.data.name.as_str() {
-            "edit" => self.edit_runner().handle_command(command),
+            "edit" => self.edit_runner().command(command),
             _ => Err(anyhow!("unknown command: {command:#?}")),
         }
     }
@@ -130,7 +130,7 @@ impl Context {
         component: MessageComponentInteraction,
     ) -> Result<InteractionResponse, anyhow::Error> {
         match component.data.custom_id.as_str() {
-            "selected_message" => self.edit_runner().handle_message_select(component),
+            "selected_message" => self.edit_runner().message_select(component),
             _ => Err(anyhow!("unknown component: {component:#?}")),
         }
     }

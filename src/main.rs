@@ -11,7 +11,7 @@
 mod interaction;
 mod webhooks;
 
-use std::{env, fs::File, ops::Deref, sync::Arc};
+use std::{env, fs::File, sync::Arc};
 
 use futures_util::StreamExt;
 use tracing_log::log::error;
@@ -30,7 +30,7 @@ use twilight_model::{
 };
 use webhooks::Cache as WebhooksCache;
 
-pub struct ContextInner {
+pub struct Context {
     http: Client,
     cache: InMemoryCache,
     webhooks_cache: WebhooksCache,
@@ -38,25 +38,9 @@ pub struct ContextInner {
     user_id: Id<UserMarker>,
 }
 
-pub struct Context(Arc<ContextInner>);
-
-impl Clone for Context {
-    fn clone(&self) -> Self {
-        Self(Arc::clone(&self.0))
-    }
-}
-
-impl Deref for Context {
-    type Target = Arc<ContextInner>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 impl Context {
     #[allow(clippy::print_stderr, clippy::wildcard_enum_match_arm)]
-    async fn handle_event(self, event: Event) {
+    async fn handle_event(self: Arc<Self>, event: Event) {
         if let Err(err) = match event {
             Event::InteractionCreate(interaction) => self.handle_interaction(interaction.0).await,
             Event::WebhooksUpdate(webhooks_update) => {
@@ -161,13 +145,13 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let webhooks_cache = WebhooksCache::new();
 
-    let ctx = Context(Arc::new(ContextInner {
+    let ctx = Arc::new(Context {
         http,
         cache,
         webhooks_cache,
         application_id,
         user_id,
-    }));
+    });
 
     ctx.create_commands(test_guild_id).await?;
 
@@ -184,7 +168,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 error!("{err:?}");
             }
         }
-        tokio::spawn(ctx.clone().handle_event(event));
+        tokio::spawn(Arc::clone(&ctx).handle_event(event));
     }
 
     Ok(())

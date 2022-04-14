@@ -31,26 +31,25 @@ pub enum Error {
 #[command(name = "edit", desc = "edit any message you select")]
 pub struct Command {}
 
-pub struct Edit(Context);
+pub struct Run<'ctx>(&'ctx Context);
 
-impl Deref for Edit {
+impl Deref for Run<'_> {
     type Target = Context;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        self.0
     }
 }
 
 impl Context {
     #[must_use]
-    pub fn edit_runner(&self) -> Edit {
-        // todo: dont do this
-        Edit(self.clone())
+    pub const fn edit_runner(&self) -> Run {
+        Run(self)
     }
 }
 
-impl Edit {
-    pub fn handle_command(
+impl Run<'_> {
+    pub fn command(
         &self,
         command: ApplicationCommand,
     ) -> Result<InteractionResponse, anyhow::Error> {
@@ -112,7 +111,7 @@ impl Edit {
         })
     }
 
-    pub fn handle_message_select(
+    pub fn message_select(
         &self,
         mut component: MessageComponentInteraction,
     ) -> Result<InteractionResponse, anyhow::Error> {
