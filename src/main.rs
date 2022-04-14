@@ -9,6 +9,7 @@
 )]
 
 mod interaction;
+mod webhooks;
 
 use std::{env, fs::File, ops::Deref, sync::Arc};
 
@@ -27,10 +28,12 @@ use twilight_model::{
         Id,
     },
 };
+use webhooks::Cache as WebhooksCache;
 
 pub struct ContextInner {
     http: Client,
     cache: InMemoryCache,
+    webhooks_cache: WebhooksCache,
     application_id: Id<ApplicationMarker>,
     user_id: Id<UserMarker>,
 }
@@ -56,6 +59,9 @@ impl Context {
     async fn handle_event(self, event: Event) {
         if let Err(err) = match event {
             Event::InteractionCreate(interaction) => self.handle_interaction(interaction.0).await,
+            Event::WebhooksUpdate(webhooks_update) => {
+                self.webhooks_cache_update(webhooks_update.channel_id).await
+            }
             _ => Ok(()),
         } {
             error!("{err:?}");
@@ -153,9 +159,12 @@ async fn main() -> Result<(), anyhow::Error> {
         .message_cache_size(25)
         .build();
 
+    let webhooks_cache = WebhooksCache::new();
+
     let ctx = Context(Arc::new(ContextInner {
         http,
         cache,
+        webhooks_cache,
         application_id,
         user_id,
     }));
