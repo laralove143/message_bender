@@ -13,7 +13,7 @@ use twilight_model::{
     guild::Permissions,
     http::interaction::{InteractionResponse, InteractionResponseType},
     id::{
-        marker::{ChannelMarker, GuildMarker, UserMarker},
+        marker::{ChannelMarker, GuildMarker, InteractionMarker, UserMarker},
         Id,
     },
 };
@@ -34,85 +34,105 @@ enum Error {
 }
 
 impl Context {
-    #[allow(clippy::wildcard_enum_match_arm)]
-    pub async fn handle_interaction(&self, interaction: Interaction) -> Result<(), anyhow::Error> {
-        let (id, token, result) = match interaction {
-            Interaction::ApplicationCommand(mut cmd) => {
-                (cmd.id, mem::take(&mut cmd.token), self.handle_command(*cmd))
-            }
-            Interaction::MessageComponent(mut component) => (
-                component.id,
-                mem::take(&mut component.token),
-                self.handle_component(*component),
-            ),
-            Interaction::ModalSubmit(mut modal) => (
-                modal.id,
-                mem::take(&mut modal.token),
-                self.handle_modal_submit(*modal),
-            ),
+    #[allow(clippy::wildcard_enum_match_arm, clippy::option_if_let_else)]
+    pub async fn handle_interaction(
+        &self,
+        mut interaction: Interaction,
+    ) -> Result<(), anyhow::Error> {
+        let (deferred, token, id) = self.defer(&mut interaction).await?;
+
+        let result = match interaction {
+            Interaction::ApplicationCommand(cmd) => self.handle_command(*cmd),
+            Interaction::MessageComponent(component) => self.handle_component(*component),
+            Interaction::ModalSubmit(modal) => self.handle_modal_submit(*modal).await,
             _ => {
                 return Err(anyhow!("unknown interaction: {interaction:#?}"));
             }
         };
 
-        match result {
-            Ok(response) => {
-                self.http
-                    .interaction(self.application_id)
-                    .create_response(id, &token, &response)
-                    .exec()
-                    .await?;
-
-                Ok(())
-            }
+        if deferred {}
+        let (response, result) = match result {
+            Ok(response) => (response, Ok(())),
             Err(err) => {
                 if let Some(user_err) = err.downcast_ref::<Error>() {
-                    self.http
-                        .interaction(self.application_id)
-                        .create_response(
-                            id,
-                            &token,
-                            &InteractionResponse {
-                                kind: InteractionResponseType::ChannelMessageWithSource,
-                                data: Some(
-                                    InteractionResponseDataBuilder::new()
-                                        .content(user_err.to_string())
-                                        .flags(MessageFlags::EPHEMERAL)
-                                        .build(),
-                                ),
-                            },
-                        )
-                        .exec()
-                        .await?;
-
-                    Ok(())
+                    (
+                        InteractionResponse {
+                            kind: InteractionResponseType::ChannelMessageWithSource,
+                            data: Some(
+                                InteractionResponseDataBuilder::new()
+                                    .content(user_err.to_string())
+                                    .flags(MessageFlags::EPHEMERAL)
+                                    .build(),
+                            ),
+                        },
+                        Ok(()),
+                    )
                 } else {
-                    self.http
-                        .interaction(self.application_id)
-                        .create_response(
-                            id,
-                            &token,
-                            &InteractionResponse {
-                                kind: InteractionResponseType::ChannelMessageWithSource,
-                                data: Some(
-                                    InteractionResponseDataBuilder::new()
-                                        .content(
-                                            "an error happened :( i let my developer know \
-                                             hopefully they'll fix it soon!"
-                                                .to_owned(),
-                                        )
-                                        .flags(MessageFlags::EPHEMERAL)
-                                        .build(),
-                                ),
-                            },
-                        )
-                        .exec()
-                        .await?;
-
-                    Err(err)
+                    (
+                        InteractionResponse {
+                            kind: InteractionResponseType::ChannelMessageWithSource,
+                            data: Some(
+                                InteractionResponseDataBuilder::new()
+                                    .content(
+                                        "an error happened :( i let my developer know hopefully \
+                                         they'll fix it soon!"
+                                            .to_owned(),
+                                    )
+                                    .flags(MessageFlags::EPHEMERAL)
+                                    .build(),
+                            ),
+                        },
+                        Err(err),
+                    )
                 }
             }
+        };
+
+        let client = self.http.interaction(self.application_id);
+        if deferred {
+            client.update_response(token)
+        } else {
+            client.create_response(id, &token, &response).exec().await?;
         }
+
+        result
+    }
+
+    #[allow(clippy::wildcard_enum_match_arm)]
+    async fn defer(
+        &self,
+        interaction: &mut Interaction,
+    ) -> Result<(bool, String, Id<InteractionMarker>), anyhow::Error> {
+        let mut deferred = false;
+
+        let (token, id) = match interaction {
+            Interaction::ApplicationCommand(cmd) => (mem::take(&mut cmd.token), cmd.id),
+            Interaction::MessageComponent(component) => {
+                (mem::take(&mut component.token), component.id)
+            }
+            Interaction::ModalSubmit(modal) => (mem::take(&mut modal.token), modal.id),
+            _ => return Err(anyhow!("deferred interaction type unknown")),
+        };
+
+        if let Interaction::ModalSubmit(modal) = interaction {
+            if modal.data.custom_id == "edit_modal" {
+                deferred = true;
+                self.http
+                    .interaction(self.application_id)
+                    .create_response(
+                        id,
+                        &token,
+                        &InteractionResponse {
+                            kind: InteractionResponseType::DeferredUpdateMessage,
+                            data: None,
+                        },
+                    )
+                    .exec()
+                    .await?;
+            }
+        }
+
+        Ok((deferred, token, id))
     }
 
     fn handle_command(
@@ -135,12 +155,12 @@ impl Context {
         }
     }
 
-    fn handle_modal_submit(
+    async fn handle_modal_submit(
         &self,
         modal: ModalSubmitInteraction,
     ) -> Result<InteractionResponse, anyhow::Error> {
         match modal.data.custom_id.as_str() {
-            "edit_modal" => self.edit_runner().handle_modal_submit(modal),
+            "edit_modal" => self.edit_runner().modal_submit(token, modal).await,
             _ => Err(anyhow!("unknown modal: {modal:#?}")),
         }
     }
