@@ -9,11 +9,14 @@ use twilight_model::{
             select_menu::SelectMenuOption, text_input::TextInputStyle, ActionRow, Component,
             SelectMenu, TextInput,
         },
-        interaction::{ApplicationCommand, MessageComponentInteraction},
+        interaction::{
+            modal::ModalSubmitInteraction, ApplicationCommand, MessageComponentInteraction,
+        },
     },
     channel::message::MessageFlags,
     guild::Permissions,
     http::interaction::{InteractionResponse, InteractionResponseType},
+    id::{marker::MessageMarker, Id},
 };
 use twilight_util::builder::InteractionResponseDataBuilder;
 
@@ -128,7 +131,7 @@ impl Run<'_> {
                     .custom_id("edit_modal".to_owned())
                     .components([Component::ActionRow(ActionRow {
                         components: vec![Component::TextInput(TextInput {
-                            custom_id: "new_content".to_owned(),
+                            custom_id: selected_message.id().to_string(),
                             label: "what to edit the message to".to_owned(),
                             style: TextInputStyle::Paragraph,
                             value: Some(selected_message.content().to_owned()),
@@ -141,5 +144,80 @@ impl Run<'_> {
                     .build(),
             ),
         })
+    }
+
+    pub async fn modal_submit(
+        &self,
+        token: &str,
+        mut modal: ModalSubmitInteraction,
+    ) -> Result<(), anyhow::Error> {
+        let input = modal.data.components.pop().ok()?.components.pop().ok()?;
+        let webhook = self.webhook(modal.channel_id).await?;
+        let edit_message_id: Id<MessageMarker> = input.custom_id.parse()?;
+        let message_ids: Vec<Id<MessageMarker>> = self
+            .cache
+            .channel_messages(modal.channel_id)
+            .ok()?
+            .take_while(|&id| id != edit_message_id)
+            .chain([edit_message_id].into_iter())
+            .collect();
+
+        for id in message_ids.iter().rev() {
+            let message = self.cache.message(*id).ok()?;
+            if message.webhook_id().is_some() {
+                continue;
+            }
+            let author_id = message.author();
+            let guild_id = message.guild_id().ok()?;
+
+            let member = self.cache.member(guild_id, author_id).ok()?;
+            let user = self.cache.user(author_id).ok()?;
+
+            let exec = self
+                .http
+                .execute_webhook(webhook.id, &webhook.token)
+                .content(if id == &edit_message_id {
+                    &input.value
+                } else {
+                    message.content()
+                })?
+                .username(member.nick().unwrap_or(&user.name));
+
+            if let Some(user_avatar) = user.avatar {
+                exec.avatar_url(&format!(
+                    "https://cdn.discordapp.com/{}",
+                    member.avatar().map_or_else(
+                        || format!("avatars/{}/{}.png", author_id, user_avatar),
+                        |member_avatar| format!(
+                            "guilds/{}/users/{}/avatars/{member_avatar}.png",
+                            guild_id, author_id
+                        )
+                    )
+                ))
+                .exec()
+            } else {
+                exec.exec()
+            }
+            .await?;
+        }
+
+        if message_ids.len() == 1 {
+            self.http
+                .delete_message(modal.channel_id, *message_ids.first().ok()?)
+                .exec()
+        } else {
+            self.http
+                .delete_messages(modal.channel_id, &message_ids)
+                .exec()
+        }
+        .await?;
+
+        self.http
+            .interaction(self.application_id)
+            .update_response(token)
+            .content(Some("done!"))?
+            .exec()
+            .await?;
+        Ok(())
     }
 }
