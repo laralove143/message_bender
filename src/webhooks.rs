@@ -29,8 +29,8 @@ impl Cache {
 }
 
 pub struct CachedWebhook {
-    id: Id<WebhookMarker>,
-    token: String,
+    pub id: Id<WebhookMarker>,
+    pub token: String,
 }
 
 impl TryFrom<Webhook> for CachedWebhook {
@@ -45,7 +45,7 @@ impl TryFrom<Webhook> for CachedWebhook {
 }
 
 impl Context {
-    async fn webhook(
+    pub async fn webhook(
         &self,
         channel_id: Id<ChannelMarker>,
     ) -> Result<Ref<'_, Id<ChannelMarker>, CachedWebhook>, anyhow::Error> {
