@@ -13,6 +13,7 @@ mod webhooks;
 
 use std::{env, fmt::Write, fs::File, sync::Arc};
 
+use anyhow::Ok;
 use futures_util::StreamExt;
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 use twilight_gateway::{Cluster, EventTypeFlags};
@@ -114,23 +115,15 @@ async fn main() -> Result<(), anyhow::Error> {
         | ResourceType::MEMBER
         | ResourceType::ROLE;
 
-    let test_guild_id: Option<Id<GuildMarker>> = env::var("TEST_GUILD_ID")
-        .ok()
-        .and_then(|id| id.parse().ok());
+    let test_guild_id: Option<Id<GuildMarker>> =
+        option_env!("TEST_GUILD_ID").and_then(|id| id.parse().ok());
 
     let token = if test_guild_id.is_some() {
-        tracing_subscriber::fmt()
-            .with_env_filter(EnvFilter::from_default_env())
-            .init();
-        env::var("TEST_BOT_TOKEN")?
+        env!("TEST_BOT_TOKEN")
     } else {
-        tracing_subscriber::fmt()
-            .with_writer(File::create("edit_logs.txt")?)
-            .with_ansi(false)
-            .with_env_filter(EnvFilter::from_default_env())
-            .init();
-        env::var("EDIT_BOT_TOKEN")?
-    };
+        option_env!("EDIT_BOT_TOKEN").ok()?
+    }
+    .to_owned();
 
     let (cluster, mut events) = Cluster::builder(token.clone(), intents)
         .event_types(event_types)
