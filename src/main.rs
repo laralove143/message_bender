@@ -22,8 +22,9 @@ use twilight_model::{
     gateway::{
         event::Event, payload::outgoing::request_guild_members::RequestGuildMembersBuilder, Intents,
     },
+    guild::Guild,
     id::{
-        marker::{ApplicationMarker, GuildMarker, UserMarker},
+        marker::{ApplicationMarker, ChannelMarker, GuildMarker, UserMarker},
         Id,
     },
 };
@@ -60,7 +61,7 @@ impl Context {
             )
             .await
         {
-            self.handle_error(err.into());
+            self.handle_error(err.into()).await;
         }
     }
 
@@ -173,14 +174,10 @@ async fn main() -> Result<(), anyhow::Error> {
     while let Some((shard_id, event)) = events.next().await {
         ctx.cache.update(&event);
         if let Event::GuildCreate(guild) = &event {
-            if let Err(err) = cluster_arc
-                .command(
-                    shard_id,
-                    &RequestGuildMembersBuilder::new(guild.id).query("", None),
-                )
-                .await
+            ctx.request_members(Arc::clone(&cluster_arc), shard_id, guild)
+                .await;
         }
-        tokio::spawn(ctx_arc.handle_event(event));
+        tokio::spawn(Arc::clone(&ctx).handle_event(event));
     }
 
     Ok(())
