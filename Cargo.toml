@@ -32,8 +32,6 @@ twilight-interactions = "0.10"
 
 tokio = { version = "1.17", features = ["rt-multi-thread", "macros"] }
 futures-util = "0.3"
-tracing-log = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = { git = "https://github.com/laralove143/anyhow" }
 thiserror = "1.0"
 dashmap = "5.2"

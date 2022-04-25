@@ -11,11 +11,9 @@
 mod interaction;
 mod webhooks;
 
-use std::{env, fs::File, sync::Arc};
+use std::{env, fmt::Write, fs::File, sync::Arc};
 
 use futures_util::StreamExt;
-use tracing_log::log::error;
-use tracing_subscriber::EnvFilter;
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 use twilight_gateway::{Cluster, EventTypeFlags};
 use twilight_http::Client;
@@ -36,6 +34,7 @@ pub struct Context {
     webhooks_cache: WebhooksCache,
     application_id: Id<ApplicationMarker>,
     user_id: Id<UserMarker>,
+    owner_channel_id: Id<ChannelMarker>,
 }
 
 impl Context {
@@ -48,34 +47,49 @@ impl Context {
             }
             _ => Ok(()),
         } {
-            error!("{err:?}");
-            if let Err(e) = self.inform_error().await {
-                error!("when informing owner: {e:?}");
+            self.handle_error(err).await;
+        }
+    }
+
+    async fn request_members(&self, cluster: Arc<Cluster>, shard_id: u64, guild: &Guild) {
+        if let Err(err) = cluster
+            .command(
+                shard_id,
+                &RequestGuildMembersBuilder::new(guild.id).query("", None),
+            )
+            .await
+        {
+            self.handle_error(err.into());
+        }
+    }
+
+    #[allow(unused_must_use, clippy::print_stderr)]
+    async fn handle_error(&self, error: anyhow::Error) {
+        let mut err_msg = format!("an error occurred: {error}");
+
+        if let Err(err) = self.message_owner(&err_msg).await {
+            writeln!(err_msg, "couldn't send the error: {err}");
+
+            if let Err(e) = self.message_owner("an error occurred :(").await {
+                writeln!(err_msg, "couldn't inform the owner: {e}");
+            }
+
+            if let Err(e) = File::options()
+                .create(true)
+                .append(true)
+                .open("edit_any_message_bot_errors.txt")
+            {
+                writeln!(err_msg, "couldn't write the error to file: {e}");
+
+                eprintln!("{err_msg}");
             }
         }
     }
 
-    async fn inform_error(&self) -> Result<(), anyhow::Error> {
+    async fn message_owner(&self, message: &str) -> Result<(), anyhow::Error> {
         self.http
-            .create_message(
-                self.http
-                    .create_private_channel(
-                        self.http
-                            .current_user_application()
-                            .exec()
-                            .await?
-                            .model()
-                            .await?
-                            .owner
-                            .id,
-                    )
-                    .exec()
-                    .await?
-                    .model()
-                    .await?
-                    .id,
-            )
-            .content("an error occurred :(")?
+            .create_message(self.owner_channel_id)
+            .content(message)?
             .exec()
             .await?;
 
@@ -137,6 +151,13 @@ async fn main() -> Result<(), anyhow::Error> {
         .await?
         .id;
     let user_id = http.current_user().exec().await?.model().await?.id;
+    let owner_channel_id = http
+        .create_private_channel(user_id)
+        .exec()
+        .await?
+        .model()
+        .await?
+        .id;
 
     let cache = InMemoryCache::builder()
         .resource_types(resource_types)
@@ -151,6 +172,7 @@ async fn main() -> Result<(), anyhow::Error> {
         webhooks_cache,
         application_id,
         user_id,
+        owner_channel_id,
     });
 
     ctx.create_commands(test_guild_id).await?;
@@ -164,11 +186,8 @@ async fn main() -> Result<(), anyhow::Error> {
                     &RequestGuildMembersBuilder::new(guild.id).query("", None),
                 )
                 .await
-            {
-                error!("{err:?}");
-            }
         }
-        tokio::spawn(Arc::clone(&ctx).handle_event(event));
+        tokio::spawn(ctx_arc.handle_event(event));
     }
 
     Ok(())
