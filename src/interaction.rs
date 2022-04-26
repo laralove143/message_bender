@@ -51,7 +51,7 @@ impl Context {
         };
 
         if deferred {}
-        let (response, result) = match result {
+        let (response, res) = match result {
             Ok(response) => (response, Ok(())),
             Err(err) => {
                 if let Some(user_err) = err.downcast_ref::<Error>() {
@@ -90,12 +90,12 @@ impl Context {
 
         let client = self.http.interaction(self.application_id);
         if deferred {
-            client.update_response(token)
+            client.update_response(&token).exec().await?;
         } else {
             client.create_response(id, &token, &response).exec().await?;
         }
 
-        result
+        res
     }
 
     #[allow(clippy::wildcard_enum_match_arm)]
@@ -157,12 +157,16 @@ impl Context {
 
     async fn handle_modal_submit(
         &self,
-        modal: ModalSubmitInteraction,
+        _modal: ModalSubmitInteraction,
     ) -> Result<InteractionResponse, anyhow::Error> {
-        match modal.data.custom_id.as_str() {
-            "edit_modal" => self.edit_runner().modal_submit(token, modal).await,
-            _ => Err(anyhow!("unknown modal: {modal:#?}")),
-        }
+        // match modal.data.custom_id.as_str() {
+        //     "edit_modal" => self.edit_runner().modal_submit(token, modal).await,
+        //     _ => Err(anyhow!("unknown modal: {modal:#?}")),
+        // }
+        Ok(InteractionResponse {
+            kind: InteractionResponseType::Pong,
+            data: None,
+        })
     }
 
     fn check_user_permissions(
