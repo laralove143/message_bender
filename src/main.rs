@@ -9,7 +9,6 @@
 )]
 
 mod interaction;
-mod webhooks;
 
 use std::{env, fmt::Write, fs::File, sync::Arc};
 
@@ -28,7 +27,7 @@ use twilight_model::{
         Id,
     },
 };
-use webhooks::Cache as WebhooksCache;
+use twilight_webhook::cache::Cache as WebhooksCache;
 
 pub struct Context {
     http: Client,
@@ -40,17 +39,17 @@ pub struct Context {
 }
 
 impl Context {
-    #[allow(clippy::print_stderr, clippy::wildcard_enum_match_arm)]
     async fn handle_event(self: Arc<Self>, event: Event) {
-        if let Err(err) = match event {
-            Event::InteractionCreate(interaction) => self.handle_interaction(interaction.0).await,
-            Event::WebhooksUpdate(webhooks_update) => {
-                self.webhooks_cache_update(webhooks_update.channel_id).await
-            }
-            _ => Ok(()),
-        } {
+        if let Err(err) = self._handle_event(event).await {
             self.handle_error(err).await;
         }
+    }
+
+    async fn _handle_event(&self, event: Event) -> Result<(), anyhow::Error> {
+        if let Event::InteractionCreate(interaction) = event {
+            self.handle_interaction(interaction.0).await?;
+        }
+        Ok(())
     }
 
     async fn request_members(&self, cluster: Arc<Cluster>, shard_id: u64, guild: &Guild) {

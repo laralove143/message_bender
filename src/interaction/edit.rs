@@ -19,6 +19,7 @@ use twilight_model::{
     id::{marker::MessageMarker, Id},
 };
 use twilight_util::builder::InteractionResponseDataBuilder;
+use twilight_webhook::util::{MinimalMember, MinimalWebhook};
 
 use crate::Context;
 
@@ -152,7 +153,10 @@ impl Run<'_> {
         mut modal: ModalSubmitInteraction,
     ) -> Result<(), anyhow::Error> {
         let input = modal.data.components.pop().ok()?.components.pop().ok()?;
-        let webhook = self.webhook(modal.channel_id).await?;
+        let webhook = self
+            .webhooks_cache
+            .get_infallible(&self.http, modal.channel_id, "any message editor")
+            .await?;
         let edit_message_id: Id<MessageMarker> = input.custom_id.parse()?;
         let message_ids: Vec<Id<MessageMarker>> = self
             .cache
@@ -161,6 +165,7 @@ impl Run<'_> {
             .take_while(|&id| id != edit_message_id)
             .chain([edit_message_id].into_iter())
             .collect();
+        let thread_id = modal.message.and_then(|m| m.thread).map(|c| c.id);
 
         for id in message_ids.iter().rev() {
             let message = self.cache.message(*id).ok()?;
@@ -173,32 +178,19 @@ impl Run<'_> {
             let member = self.cache.member(guild_id, author_id).ok()?;
             let user = self.cache.user(author_id).ok()?;
 
-            let exec = self
-                .http
-                .execute_webhook(webhook.id, &webhook.token)
+            MinimalWebhook::try_from(webhook.value())?
+                .execute_as_member(
+                    &self.http,
+                    thread_id,
+                    &MinimalMember::from((&*member, &*user)),
+                )
                 .content(if id == &edit_message_id {
                     &input.value
                 } else {
                     message.content()
                 })?
-                .username(member.nick().unwrap_or(&user.name));
-
-            if let Some(user_avatar) = user.avatar {
-                exec.avatar_url(&format!(
-                    "https://cdn.discordapp.com/{}",
-                    member.avatar().map_or_else(
-                        || format!("avatars/{}/{}.png", author_id, user_avatar),
-                        |member_avatar| format!(
-                            "guilds/{}/users/{}/avatars/{member_avatar}.png",
-                            guild_id, author_id
-                        )
-                    )
-                ))
                 .exec()
-            } else {
-                exec.exec()
-            }
-            .await?;
+                .await?;
         }
 
         if message_ids.len() == 1 {
