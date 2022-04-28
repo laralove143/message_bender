@@ -13,7 +13,6 @@ use twilight_model::{
             modal::ModalSubmitInteraction, ApplicationCommand, MessageComponentInteraction,
         },
     },
-    channel::message::MessageFlags,
     guild::Permissions,
     http::interaction::{InteractionResponse, InteractionResponseType},
     id::{marker::MessageMarker, Id},
@@ -21,7 +20,7 @@ use twilight_model::{
 use twilight_util::builder::InteractionResponseDataBuilder;
 use twilight_webhook::util::{MinimalMember, MinimalWebhook};
 
-use crate::Context;
+use crate::interaction;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -35,28 +34,22 @@ pub enum Error {
 #[command(name = "edit", desc = "edit any message you select")]
 pub struct Command {}
 
-pub struct Run<'ctx>(&'ctx Context);
+pub struct Handler<'ctx>(&'ctx interaction::Handler<'ctx>);
 
-impl Deref for Run<'_> {
-    type Target = Context;
+impl<'ctx> Deref for Handler<'ctx> {
+    type Target = interaction::Handler<'ctx>;
 
     fn deref(&self) -> &Self::Target {
         self.0
     }
 }
 
-impl Context {
-    #[must_use]
-    pub const fn edit_runner(&self) -> Run {
-        Run(self)
+impl<'ctx> Handler<'ctx> {
+    pub const fn new(interaction_handler: &'ctx interaction::Handler) -> Self {
+        Self(interaction_handler)
     }
-}
 
-impl Run<'_> {
-    pub fn command(
-        &self,
-        command: ApplicationCommand,
-    ) -> Result<InteractionResponse, anyhow::Error> {
+    pub async fn command(&self, command: ApplicationCommand) -> Result<(), anyhow::Error> {
         self.check_self_permissions(
             command.channel_id,
             Permissions::MANAGE_MESSAGES | Permissions::MANAGE_WEBHOOKS,
@@ -94,37 +87,34 @@ impl Run<'_> {
             });
         }
 
-        Ok(InteractionResponse {
-            kind: InteractionResponseType::ChannelMessageWithSource,
-            data: Some(
-                InteractionResponseDataBuilder::new()
-                    .content("please select the message you want to edit".to_owned())
-                    .components([Component::ActionRow(ActionRow {
-                        components: vec![Component::SelectMenu(SelectMenu {
-                            custom_id: "selected_message".to_owned(),
-                            options: message_options,
-                            placeholder: Some("message to edit".to_owned()),
-                            disabled: false,
-                            max_values: None,
-                            min_values: None,
-                        })],
-                    })])
-                    .flags(MessageFlags::EPHEMERAL)
-                    .build(),
-            ),
-        })
+        self.update_response()
+            .content("please select the message you want to edit")
+            .components(&[Component::ActionRow(ActionRow {
+                components: vec![Component::SelectMenu(SelectMenu {
+                    custom_id: "selected_message".to_owned(),
+                    options: message_options,
+                    placeholder: Some("message to edit".to_owned()),
+                    disabled: false,
+                    max_values: None,
+                    min_values: None,
+                })],
+            })])
+            .exec()
+            .await?;
+
+        Ok(())
     }
 
-    pub fn message_select(
+    pub async fn message_select(
         &self,
         mut component: MessageComponentInteraction,
-    ) -> Result<InteractionResponse, anyhow::Error> {
+    ) -> Result<(), anyhow::Error> {
         let selected_message = self
             .cache
             .message(component.data.values.pop().ok()?.parse()?)
             .ok()?;
 
-        Ok(InteractionResponse {
+        self.create_response(&InteractionResponse {
             kind: InteractionResponseType::Modal,
             data: Some(
                 InteractionResponseDataBuilder::new()
@@ -145,11 +135,11 @@ impl Run<'_> {
                     .build(),
             ),
         })
+        .await
     }
 
     pub async fn modal_submit(
         &self,
-        token: &str,
         mut modal: ModalSubmitInteraction,
     ) -> Result<(), anyhow::Error> {
         let input = modal.data.components.pop().ok()?.components.pop().ok()?;
@@ -204,12 +194,8 @@ impl Run<'_> {
         }
         .await?;
 
-        self.http
-            .interaction(self.application_id)
-            .update_response(token)
-            .content(Some("done!"))?
-            .exec()
-            .await?;
+        self.update_response().content("done!").exec().await?;
+
         Ok(())
     }
 }

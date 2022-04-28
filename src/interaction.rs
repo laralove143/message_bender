@@ -1,18 +1,24 @@
-mod edit;
+pub mod edit;
 
-use std::mem;
+use std::{mem, ops::Deref};
 
 use anyhow::anyhow;
 use thiserror::Error;
+use twilight_http::Client;
 use twilight_interactions::command::CreateCommand;
 use twilight_model::{
-    application::interaction::{
-        modal::ModalSubmitInteraction, ApplicationCommand, Interaction, MessageComponentInteraction,
+    application::{
+        component::Component,
+        interaction::{
+            modal::ModalSubmitInteraction, ApplicationCommand, Interaction,
+            MessageComponentInteraction,
+        },
     },
+    channel::message::MessageFlags,
     guild::Permissions,
-    http::interaction::{InteractionResponse, InteractionResponseType},
+    http::interaction::{InteractionResponse, InteractionResponseData, InteractionResponseType},
     id::{
-        marker::{ChannelMarker, GuildMarker, UserMarker},
+        marker::{ApplicationMarker, ChannelMarker, GuildMarker, InteractionMarker, UserMarker},
         Id,
     },
 };
@@ -31,46 +37,57 @@ enum Error {
     SelfMissingPermissions(Permissions),
 }
 
-impl Context {
-    #[allow(clippy::wildcard_enum_match_arm, clippy::option_if_let_else)]
-    pub async fn handle_interaction(
-        &self,
-        mut interaction: Interaction,
-    ) -> Result<(), anyhow::Error> {
-        let token = self.defer(&mut interaction).await?;
+struct UpdateResponse<'res> {
+    handler: &'res Handler<'res>,
+    content: Option<&'res str>,
+    components: Option<&'res [Component]>,
+}
 
-        let client = self.http.interaction(self.application_id);
-        if let Err(err) = match interaction {
-            Interaction::ApplicationCommand(cmd) => self.handle_command(*cmd),
-            Interaction::MessageComponent(component) => self.handle_component(*component),
-            Interaction::ModalSubmit(modal) => self.handle_modal_submit(*modal).await,
-            _ => return Err(anyhow!("unknown interaction: {interaction:#?}")),
-        } {
-            return if let Some(user_err) = err.downcast_ref::<Error>() {
-                client
-                    .update_response(&token)
-                    .content(Some(&user_err.to_string()))?
-                    .exec()
-                    .await?;
-                Ok(())
-            } else {
-                client
-                    .update_response(&token)
-                    .content(Some(
-                        "an error happened :( i let my developer know hopefully they'll fix it \
-                         soon!",
-                    ))?
-                    .exec()
-                    .await?;
-                Err(err)
-            };
-        };
+impl<'res> UpdateResponse<'res> {
+    async fn exec(&self) -> Result<(), anyhow::Error> {
+        self.handler
+            .http
+            .interaction(self.handler.application_id)
+            .update_response(&self.handler.token)
+            .content(self.content)?
+            .components(self.components)?
+            .exec()
+            .await?;
 
         Ok(())
     }
 
+    const fn content(mut self, content: &'res str) -> Self {
+        self.content = Some(content);
+        self
+    }
+
+    const fn components(mut self, components: &'res [Component]) -> Self {
+        self.components = Some(components);
+        self
+    }
+}
+
+pub struct Handler<'ctx> {
+    ctx: &'ctx Context,
+    id: Id<InteractionMarker>,
+    token: String,
+}
+
+impl Deref for Handler<'_> {
+    type Target = Context;
+
+    fn deref(&self) -> &Self::Target {
+        self.ctx
+    }
+}
+
+impl<'ctx> Handler<'ctx> {
     #[allow(clippy::wildcard_enum_match_arm)]
-    async fn defer(&self, interaction: &mut Interaction) -> Result<String, anyhow::Error> {
+    pub async fn new(
+        ctx: &'ctx Context,
+        interaction: &mut Interaction,
+    ) -> Result<Handler<'ctx>, anyhow::Error> {
         let (token, id, response_type) = match interaction {
             Interaction::ApplicationCommand(cmd) => (
                 mem::take(&mut cmd.token),
@@ -90,54 +107,97 @@ impl Context {
             _ => return Err(anyhow!("type of the interaction to defer is unknown")),
         };
 
-        self.http
-            .interaction(self.application_id)
+        ctx.http
+            .interaction(ctx.application_id)
             .create_response(
                 id,
                 &token,
                 &InteractionResponse {
                     kind: response_type,
-                    data: None,
+                    data: Some(InteractionResponseData {
+                        flags: Some(MessageFlags::EPHEMERAL),
+                        ..InteractionResponseData::default()
+                    }),
                 },
             )
             .exec()
             .await?;
 
-        Ok(token)
+        Ok(Self { ctx, id, token })
     }
 
-    fn handle_command(
-        &self,
-        command: ApplicationCommand,
-    ) -> Result<InteractionResponse, anyhow::Error> {
+    #[allow(clippy::wildcard_enum_match_arm, clippy::option_if_let_else)]
+    pub async fn handle(&self, interaction: Interaction) -> Result<(), anyhow::Error> {
+        if let Err(err) = match interaction {
+            Interaction::ApplicationCommand(cmd) => self.handle_command(*cmd).await,
+            Interaction::MessageComponent(component) => self.handle_component(*component).await,
+            Interaction::ModalSubmit(modal) => self.handle_modal_submit(*modal).await,
+            _ => return Err(anyhow!("unknown interaction: {interaction:#?}")),
+        } {
+            return if let Some(user_err) = err.downcast_ref::<Error>() {
+                self.update_response()
+                    .content(&user_err.to_string())
+                    .exec()
+                    .await?;
+                Ok(())
+            } else {
+                self.update_response()
+                    .content(
+                        "an error happened :( i let my developer know hopefully they'll fix it \
+                         soon!",
+                    )
+                    .exec()
+                    .await?;
+                Err(err)
+            };
+        };
+
+        Ok(())
+    }
+
+    async fn handle_command(&self, command: ApplicationCommand) -> Result<(), anyhow::Error> {
         match command.data.name.as_str() {
-            "edit" => self.edit_runner().command(command),
+            "edit" => self.edit().command(command).await,
             _ => Err(anyhow!("unknown command: {command:#?}")),
         }
     }
 
-    fn handle_component(
+    async fn handle_component(
         &self,
         component: MessageComponentInteraction,
-    ) -> Result<InteractionResponse, anyhow::Error> {
+    ) -> Result<(), anyhow::Error> {
         match component.data.custom_id.as_str() {
-            "selected_message" => self.edit_runner().message_select(component),
+            "selected_message" => self.edit().message_select(component).await,
             _ => Err(anyhow!("unknown component: {component:#?}")),
         }
     }
 
     async fn handle_modal_submit(
         &self,
-        _modal: ModalSubmitInteraction,
-    ) -> Result<InteractionResponse, anyhow::Error> {
-        // match modal.data.custom_id.as_str() {
-        //     "edit_modal" => self.edit_runner().modal_submit(token, modal).await,
-        //     _ => Err(anyhow!("unknown modal: {modal:#?}")),
-        // }
-        Ok(InteractionResponse {
-            kind: InteractionResponseType::Pong,
-            data: None,
-        })
+        modal: ModalSubmitInteraction,
+    ) -> Result<(), anyhow::Error> {
+        match modal.data.custom_id.as_str() {
+            "edit_modal" => self.edit().modal_submit(modal).await,
+            _ => Err(anyhow!("unknown modal: {modal:#?}")),
+        }
+    }
+
+    const fn update_response(&self) -> UpdateResponse<'_> {
+        UpdateResponse {
+            handler: self,
+            content: None,
+            components: None,
+        }
+    }
+
+    async fn create_response(&self, response: &InteractionResponse) -> Result<(), anyhow::Error> {
+        self.http
+            .interaction(self.application_id)
+            .create_response(self.id, &self.token, response)
+            .exec()
+            .await?;
+
+        Ok(())
     }
 
     fn check_user_permissions(
@@ -174,18 +234,24 @@ impl Context {
         }
     }
 
-    pub async fn create_commands(
-        &self,
-        test_guild_id: Option<Id<GuildMarker>>,
-    ) -> Result<(), anyhow::Error> {
-        let interaction_client = self.http.interaction(self.application_id);
-        let commands = [edit::Command::create_command().into()];
-        match test_guild_id {
-            Some(id) => interaction_client.set_guild_commands(id, &commands).exec(),
-            None => interaction_client.set_global_commands(&commands).exec(),
-        }
-        .await?;
-
-        Ok(())
+    pub const fn edit(&self) -> edit::Handler {
+        edit::Handler::new(self)
     }
+}
+
+pub async fn create_commands(
+    http: &Client,
+    application_id: Id<ApplicationMarker>,
+    test_guild_id: Option<Id<GuildMarker>>,
+) -> Result<(), anyhow::Error> {
+    let interaction_client = http.interaction(application_id);
+    let commands = [edit::Command::create_command().into()];
+
+    match test_guild_id {
+        Some(id) => interaction_client.set_guild_commands(id, &commands).exec(),
+        None => interaction_client.set_global_commands(&commands).exec(),
+    }
+    .await?;
+
+    Ok(())
 }

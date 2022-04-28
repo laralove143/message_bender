@@ -3,7 +3,6 @@
     clippy::blanket_clippy_restriction_lints,
     clippy::missing_docs_in_private_items,
     clippy::implicit_return,
-    clippy::multiple_inherent_impl,
     clippy::missing_errors_doc,
     clippy::pattern_type_mismatch
 )]
@@ -18,6 +17,7 @@ use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 use twilight_gateway::{Cluster, EventTypeFlags};
 use twilight_http::Client;
 use twilight_model::{
+    application::interaction::Interaction,
     gateway::{
         event::Event, payload::outgoing::request_guild_members::RequestGuildMembersBuilder, Intents,
     },
@@ -46,8 +46,8 @@ impl Context {
     }
 
     async fn _handle_event(&self, event: Event) -> Result<(), anyhow::Error> {
-        if let Event::InteractionCreate(interaction) = event {
-            self.handle_interaction(interaction.0).await?;
+        if let Event::InteractionCreate(mut interaction) = event {
+            self.interaction_handler(&mut interaction.0).await?;
         }
         Ok(())
     }
@@ -93,6 +93,23 @@ impl Context {
             .content(message)?
             .exec()
             .await?;
+
+        Ok(())
+    }
+
+    #[allow(clippy::wildcard_enum_match_arm)]
+    pub async fn interaction_handler(
+        &self,
+        interaction: &mut Interaction,
+    ) -> Result<interaction::Handler<'_>, anyhow::Error> {
+        interaction::Handler::new(self, interaction).await
+    }
+
+    pub async fn create_commands(
+        &self,
+        test_guild_id: Option<Id<GuildMarker>>,
+    ) -> Result<(), anyhow::Error> {
+        interaction::create_commands(&self.http, self.application_id, test_guild_id).await?;
 
         Ok(())
     }
