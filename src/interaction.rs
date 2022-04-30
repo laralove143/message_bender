@@ -113,6 +113,7 @@ impl<'ctx> Handler<'ctx> {
             return if let Some(user_err) = err.downcast_ref::<Error>() {
                 self.update_response()
                     .content(&user_err.to_string())
+                    .components(&[])
                     .exec()
                     .await?;
                 Ok(())
@@ -122,6 +123,7 @@ impl<'ctx> Handler<'ctx> {
                         "an error happened :( i let my developer know hopefully they'll fix it \
                          soon!",
                     )
+                    .components(&[])
                     .exec()
                     .await?;
                 Err(err)
