@@ -155,16 +155,16 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let http = Client::new(token);
 
-    let application_id = http
+    let application = http
         .current_user_application()
         .exec()
         .await?
         .model()
-        .await?
-        .id;
+        .await?;
+    let application_id = application.id;
     let user_id = http.current_user().exec().await?.model().await?.id;
     let owner_channel_id = http
-        .create_private_channel(user_id)
+        .create_private_channel(application.owner.ok()?.id)
         .exec()
         .await?
         .model()
