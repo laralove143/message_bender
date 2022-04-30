@@ -68,7 +68,7 @@ impl<'ctx> Handler<'ctx> {
         {
             let message = self.cache.message(id).ok()?;
             let content = message.content();
-            if content.len() > 2000 {
+            if content.len() >= 2000 {
                 continue;
             }
             message_options.push(SelectMenuOption {
@@ -126,7 +126,7 @@ impl<'ctx> Handler<'ctx> {
                             label: "what to edit the message to".to_owned(),
                             style: TextInputStyle::Paragraph,
                             value: Some(selected_message.content().to_owned()),
-                            max_length: Some(2001),
+                            max_length: Some(2000),
                             min_length: None,
                             placeholder: None,
                             required: None,
