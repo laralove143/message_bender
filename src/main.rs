@@ -47,7 +47,9 @@ impl Context {
 
     async fn _handle_event(&self, event: Event) -> Result<(), anyhow::Error> {
         if let Event::InteractionCreate(mut interaction) = event {
-            self.interaction_handler(&mut interaction.0).await?;
+            self.interaction_handler(&mut interaction.0)?
+                .handle(interaction.0)
+                .await?;
         }
         Ok(())
     }
