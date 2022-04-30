@@ -10,7 +10,7 @@ use twilight_model::{
     application::{
         component::Component,
         interaction::{
-            modal::ModalSubmitInteraction, ApplicationCommand, Interaction,
+            modal::ModalSubmitInteraction, ApplicationCommand, Interaction, InteractionType,
             MessageComponentInteraction,
         },
     },
@@ -84,50 +84,26 @@ impl Deref for Handler<'_> {
 
 impl<'ctx> Handler<'ctx> {
     #[allow(clippy::wildcard_enum_match_arm)]
-    pub async fn new(
+    pub fn new(
         ctx: &'ctx Context,
         interaction: &mut Interaction,
     ) -> Result<Handler<'ctx>, anyhow::Error> {
-        let (token, id, response_type) = match interaction {
-            Interaction::ApplicationCommand(cmd) => (
-                mem::take(&mut cmd.token),
-                cmd.id,
-                InteractionResponseType::DeferredChannelMessageWithSource,
-            ),
-            Interaction::MessageComponent(component) => (
-                mem::take(&mut component.token),
-                component.id,
-                InteractionResponseType::DeferredUpdateMessage,
-            ),
-            Interaction::ModalSubmit(modal) => (
-                mem::take(&mut modal.token),
-                modal.id,
-                InteractionResponseType::DeferredUpdateMessage,
-            ),
-            _ => return Err(anyhow!("type of the interaction to defer is unknown")),
+        let (token, id) = match interaction {
+            Interaction::ApplicationCommand(cmd) => (mem::take(&mut cmd.token), cmd.id),
+            Interaction::MessageComponent(component) => {
+                (mem::take(&mut component.token), component.id)
+            }
+            Interaction::ModalSubmit(modal) => (mem::take(&mut modal.token), modal.id),
+            _ => return Err(anyhow!("type of the interaction to handle is unknown")),
         };
-
-        ctx.http
-            .interaction(ctx.application_id)
-            .create_response(
-                id,
-                &token,
-                &InteractionResponse {
-                    kind: response_type,
-                    data: Some(InteractionResponseData {
-                        flags: Some(MessageFlags::EPHEMERAL),
-                        ..InteractionResponseData::default()
-                    }),
-                },
-            )
-            .exec()
-            .await?;
 
         Ok(Self { ctx, id, token })
     }
 
     #[allow(clippy::wildcard_enum_match_arm, clippy::option_if_let_else)]
     pub async fn handle(&self, interaction: Interaction) -> Result<(), anyhow::Error> {
+        self.defer(interaction.kind()).await?;
+
         if let Err(err) = match interaction {
             Interaction::ApplicationCommand(cmd) => self.handle_command(*cmd).await,
             Interaction::MessageComponent(component) => self.handle_component(*component).await,
@@ -180,6 +156,34 @@ impl<'ctx> Handler<'ctx> {
             "edit_modal" => self.edit().modal_submit(modal).await,
             _ => Err(anyhow!("unknown modal: {modal:#?}")),
         }
+    }
+
+    async fn defer(&self, kind: InteractionType) -> Result<(), anyhow::Error> {
+        let response_type = match kind {
+            InteractionType::ApplicationCommand => {
+                InteractionResponseType::DeferredChannelMessageWithSource
+            }
+            InteractionType::ModalSubmit => InteractionResponseType::DeferredUpdateMessage,
+            _ => return Ok(()),
+        };
+
+        self.http
+            .interaction(self.application_id)
+            .create_response(
+                self.id,
+                &self.token,
+                &InteractionResponse {
+                    kind: response_type,
+                    data: Some(InteractionResponseData {
+                        flags: Some(MessageFlags::EPHEMERAL),
+                        ..InteractionResponseData::default()
+                    }),
+                },
+            )
+            .exec()
+            .await?;
+
+        Ok(())
     }
 
     const fn update_response(&self) -> UpdateResponse<'_> {
