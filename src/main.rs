@@ -126,6 +126,12 @@ async fn main() -> Result<(), anyhow::Error> {
     let event_types = EventTypeFlags::INTERACTION_CREATE
         | EventTypeFlags::GUILD_MESSAGES
         | EventTypeFlags::GUILDS
+        | EventTypeFlags::THREAD_CREATE
+        | EventTypeFlags::THREAD_UPDATE
+        | EventTypeFlags::THREAD_DELETE
+        | EventTypeFlags::THREAD_LIST_SYNC
+        | EventTypeFlags::THREAD_MEMBER_UPDATE
+        | EventTypeFlags::THREAD_MEMBERS_UPDATE
         | EventTypeFlags::GUILD_MEMBERS
         | EventTypeFlags::MEMBER_CHUNK;
     let resource_types = ResourceType::MESSAGE

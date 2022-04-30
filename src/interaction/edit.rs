@@ -138,10 +138,16 @@ impl<'ctx> Handler<'ctx> {
         &self,
         mut modal: ModalSubmitInteraction,
     ) -> Result<(), anyhow::Error> {
+        let channel = self.cache.channel(modal.channel_id).ok()?;
+        let (channel_id, thread_id) = if channel.kind.is_thread() {
+            (channel.parent_id.ok()?, Some(channel.id))
+        } else {
+            (channel.id, None)
+        };
         let input = modal.data.components.pop().ok()?.components.pop().ok()?;
         let webhook = self
             .webhooks_cache
-            .get_infallible(&self.http, modal.channel_id, "any message editor")
+            .get_infallible(&self.http, channel_id, "any message editor")
             .await?;
         let edit_message_id: Id<MessageMarker> = input.custom_id.parse()?;
         let message_ids: Vec<Id<MessageMarker>> = self
@@ -151,7 +157,6 @@ impl<'ctx> Handler<'ctx> {
             .take_while(|&id| id != edit_message_id)
             .chain([edit_message_id].into_iter())
             .collect();
-        let thread_id = modal.message.and_then(|m| m.thread).map(|c| c.id);
 
         for id in message_ids.iter().rev() {
             let message = self.cache.message(*id).ok()?;
@@ -159,16 +164,17 @@ impl<'ctx> Handler<'ctx> {
                 continue;
             }
             let author_id = message.author();
-            let guild_id = message.guild_id().ok()?;
-
-            let member = self.cache.member(guild_id, author_id).ok()?;
-            let user = self.cache.user(author_id).ok()?;
-
             MinimalWebhook::try_from(webhook.value())?
                 .execute_as_member(
                     &self.http,
                     thread_id,
-                    &MinimalMember::from((&*member, &*user)),
+                    &MinimalMember::from((
+                        &*self
+                            .cache
+                            .member(message.guild_id().ok()?, author_id)
+                            .ok()?,
+                        &*self.cache.user(author_id).ok()?,
+                    )),
                 )
                 .content(if id == &edit_message_id {
                     &input.value
