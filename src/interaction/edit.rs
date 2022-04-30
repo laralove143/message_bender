@@ -20,7 +20,7 @@ use twilight_model::{
 use twilight_util::builder::InteractionResponseDataBuilder;
 use twilight_webhook::util::{MinimalMember, MinimalWebhook};
 
-use crate::interaction;
+use crate::{interaction, interaction::check_member_permissions};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -54,11 +54,7 @@ impl<'ctx> Handler<'ctx> {
             command.channel_id,
             Permissions::MANAGE_MESSAGES | Permissions::MANAGE_WEBHOOKS,
         )?;
-        self.check_user_permissions(
-            command.member.ok()?.user.ok()?.id,
-            command.channel_id,
-            Permissions::MANAGE_MESSAGES,
-        )?;
+        check_member_permissions(command.member.ok()?, Permissions::MANAGE_MESSAGES)?;
 
         let mut message_options: Vec<SelectMenuOption> = Vec::with_capacity(25);
         for id in self

@@ -2,7 +2,7 @@ pub mod edit;
 
 use std::{mem, ops::Deref};
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Ok};
 use thiserror::Error;
 use twilight_http::Client;
 use twilight_interactions::command::CreateCommand;
@@ -15,7 +15,7 @@ use twilight_model::{
         },
     },
     channel::message::MessageFlags,
-    guild::Permissions,
+    guild::{PartialMember, Permissions},
     http::interaction::{InteractionResponse, InteractionResponseData, InteractionResponseType},
     id::{
         marker::{ApplicationMarker, ChannelMarker, GuildMarker, InteractionMarker, UserMarker},
@@ -206,22 +206,6 @@ impl<'ctx> Handler<'ctx> {
         Ok(())
     }
 
-    fn check_user_permissions(
-        &self,
-        user_id: Id<UserMarker>,
-        channel_id: Id<ChannelMarker>,
-        required: Permissions,
-    ) -> Result<(), anyhow::Error> {
-        let missing_permissions =
-            required - self.cache.permissions().in_channel(user_id, channel_id)?;
-
-        if missing_permissions.is_empty() {
-            Ok(())
-        } else {
-            Err(Error::UserMissingPermissions(missing_permissions).into())
-        }
-    }
-
     fn check_self_permissions(
         &self,
         channel_id: Id<ChannelMarker>,
@@ -260,4 +244,17 @@ pub async fn create_commands(
     .await?;
 
     Ok(())
+}
+
+fn check_member_permissions(
+    member: PartialMember,
+    required: Permissions,
+) -> Result<(), anyhow::Error> {
+    let missing_permissions = required - member.permissions.ok()?;
+
+    if missing_permissions.is_empty() {
+        Ok(())
+    } else {
+        Err(Error::SelfMissingPermissions(missing_permissions).into())
+    }
 }
