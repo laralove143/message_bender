@@ -194,7 +194,11 @@ impl<'ctx> Handler<'ctx> {
         }
         .await?;
 
-        self.update_response().content("done!").exec().await?;
+        self.update_response()
+            .content("done!")
+            .components(&[])
+            .exec()
+            .await?;
 
         Ok(())
     }
