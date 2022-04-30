@@ -54,7 +54,7 @@ impl<'ctx> Handler<'ctx> {
             command.channel_id,
             Permissions::MANAGE_MESSAGES | Permissions::MANAGE_WEBHOOKS,
         )?;
-        check_member_permissions(command.member.ok()?, Permissions::MANAGE_MESSAGES)?;
+        check_member_permissions(&command.member.ok()?, Permissions::MANAGE_MESSAGES)?;
 
         let mut message_options: Vec<SelectMenuOption> = Vec::with_capacity(25);
         for id in self

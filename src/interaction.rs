@@ -18,7 +18,7 @@ use twilight_model::{
     guild::{PartialMember, Permissions},
     http::interaction::{InteractionResponse, InteractionResponseData, InteractionResponseType},
     id::{
-        marker::{ApplicationMarker, ChannelMarker, GuildMarker, InteractionMarker, UserMarker},
+        marker::{ApplicationMarker, ChannelMarker, GuildMarker, InteractionMarker},
         Id,
     },
 };
@@ -160,6 +160,7 @@ impl<'ctx> Handler<'ctx> {
         }
     }
 
+    #[allow(clippy::wildcard_enum_match_arm)]
     async fn defer(&self, kind: InteractionType) -> Result<(), anyhow::Error> {
         let response_type = match kind {
             InteractionType::ApplicationCommand => {
@@ -247,7 +248,7 @@ pub async fn create_commands(
 }
 
 fn check_member_permissions(
-    member: PartialMember,
+    member: &PartialMember,
     required: Permissions,
 ) -> Result<(), anyhow::Error> {
     let missing_permissions = required - member.permissions.ok()?;
@@ -255,6 +256,6 @@ fn check_member_permissions(
     if missing_permissions.is_empty() {
         Ok(())
     } else {
-        Err(Error::SelfMissingPermissions(missing_permissions).into())
+        Err(Error::UserMissingPermissions(missing_permissions).into())
     }
 }
