@@ -100,11 +100,11 @@ impl Context {
     }
 
     #[allow(clippy::wildcard_enum_match_arm)]
-    pub async fn interaction_handler(
+    pub fn interaction_handler(
         &self,
         interaction: &mut Interaction,
     ) -> Result<interaction::Handler<'_>, anyhow::Error> {
-        interaction::Handler::new(self, interaction).await
+        interaction::Handler::new(self, interaction)
     }
 
     pub async fn create_commands(
