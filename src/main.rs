@@ -173,7 +173,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let cache = InMemoryCache::builder()
         .resource_types(resource_types)
-        .message_cache_size(25)
+        .message_cache_size(24)
         .build();
 
     let webhooks_cache = WebhooksCache::new();
