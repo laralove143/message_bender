@@ -57,11 +57,11 @@ impl<'ctx> Handler<'ctx> {
         check_member_permissions(&command.member.ok()?, Permissions::MANAGE_MESSAGES)?;
 
         let mut message_options: Vec<SelectMenuOption> = Vec::with_capacity(25);
-        let messages = self.cache.channel_messages(command.channel_id);
-        if messages
-            .as_ref()
-            .map_or(true, |msgs| msgs.size_hint().0 == 0)
-        {
+        let mut messages = self
+            .cache
+            .channel_messages(command.channel_id)
+            .map(Iterator::peekable);
+        if messages.as_mut().map_or(true, |msgs| msgs.peek().is_none()) {
             return Err(super::Error::Edit(Error::NoCachedMessages).into());
         }
 
