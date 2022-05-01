@@ -9,7 +9,7 @@
 
 mod interaction;
 
-use std::{env, fmt::Write, fs::File, sync::Arc};
+use std::{fmt::Write, fs::File, sync::Arc};
 
 use anyhow::Ok;
 use futures_util::StreamExt;
@@ -143,12 +143,12 @@ async fn main() -> Result<(), anyhow::Error> {
     let test_guild_id: Option<Id<GuildMarker>> =
         option_env!("TEST_GUILD_ID").and_then(|id| id.parse().ok());
 
-    let token = if test_guild_id.is_some() {
-        env!("TEST_BOT_TOKEN")
-    } else {
-        option_env!("EDIT_BOT_TOKEN").ok()?
-    }
-    .to_owned();
+    let token = test_guild_id
+        .is_some()
+        .then(|| option_env!("TEST_BOT_TOKEN"))
+        .unwrap_or(option_env!("EDIT_BOT_TOKEN"))
+        .ok()?
+        .to_owned();
 
     let (cluster, mut events) = Cluster::builder(token.clone(), intents)
         .event_types(event_types)
