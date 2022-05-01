@@ -4,3 +4,4 @@
 
 i'm a discord bot that lets you edit other people's messages!
 
+![example](https://github.com/laralove143/edit-any-message-discord-bot/blob/650e2f4c0e3007b32537c32b661ecd862b4a01f4/example.gif?raw=true)
