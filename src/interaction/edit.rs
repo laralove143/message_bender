@@ -52,7 +52,7 @@ impl<'ctx> Handler<'ctx> {
     pub async fn command(&self, command: ApplicationCommand) -> Result<(), anyhow::Error> {
         self.check_self_permissions(
             command.channel_id,
-            Permissions::MANAGE_MESSAGES | Permissions::MANAGE_WEBHOOKS,
+            Permissions::MANAGE_MESSAGES | Permissions::MANAGE_WEBHOOKS | Permissions::VIEW_CHANNEL,
         )?;
         check_member_permissions(&command.member.ok()?, Permissions::MANAGE_MESSAGES)?;
 
