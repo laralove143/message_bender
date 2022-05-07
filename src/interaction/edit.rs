@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use anyhow::Ok;
+use anyhow::IntoResult;
 use thiserror::Error;
 use twilight_interactions::command::{CommandModel, CreateCommand};
 use twilight_model::{

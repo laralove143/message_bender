@@ -2,7 +2,7 @@ pub mod edit;
 
 use std::{mem, ops::Deref};
 
-use anyhow::{anyhow, Ok};
+use anyhow::{anyhow, IntoResult};
 use thiserror::Error;
 use twilight_http::Client;
 use twilight_interactions::command::CreateCommand;

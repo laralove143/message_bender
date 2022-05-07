@@ -11,7 +11,7 @@ mod interaction;
 
 use std::{fmt::Write, fs::File, sync::Arc};
 
-use anyhow::Ok;
+use anyhow::IntoResult;
 use futures_util::StreamExt;
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 use twilight_gateway::{Cluster, EventTypeFlags};

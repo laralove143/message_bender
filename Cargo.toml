@@ -33,6 +33,6 @@ twilight-webhook = "0.10"
 
 tokio = { version = "1.17", features = ["rt-multi-thread", "macros"] }
 futures-util = "0.3"
-anyhow = { git = "https://github.com/laralove143/anyhow" }
+anyhow = { git = "https://github.com/laralove143/anyhow", features = ["backtrace"] }
 thiserror = "1.0"
 dashmap = "5.2"
