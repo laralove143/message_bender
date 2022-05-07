@@ -168,25 +168,36 @@ impl<'ctx> Handler<'ctx> {
                 continue;
             }
             let author_id = message.author();
-            MinimalWebhook::try_from(webhook.value())?
-                .execute_as_member(
-                    &self.http,
-                    thread_id,
-                    &MinimalMember::from((
-                        &*self
-                            .cache
-                            .member(message.guild_id().ok()?, author_id)
-                            .ok()?,
-                        &*self.cache.user(author_id).ok()?,
-                    )),
-                )
+            let member = self
+                .cache
+                .member(message.guild_id().ok()?, author_id)
+                .ok()?;
+            let user = self.cache.user(author_id).ok()?;
+
+            let minimal_member = MinimalMember::from_cached_member(&member, &user);
+            let minimal_webhook = MinimalWebhook::try_from(webhook.value())?;
+            let exec = minimal_webhook
+                .execute_as_member(&self.http, thread_id, &minimal_member)
                 .content(if id == &edit_message_id {
                     &input.value
                 } else {
                     message.content()
-                })?
+                })?;
+            if id == &edit_message_id {
+                let interaction_member = modal.member.as_ref().ok()?;
+                exec.username(&format!(
+                    "{} (edited by {})",
+                    member.nick().unwrap_or(&user.name),
+                    interaction_member
+                        .nick
+                        .as_ref()
+                        .unwrap_or(&interaction_member.user.as_ref().ok()?.name)
+                ))
                 .exec()
                 .await?;
+            } else {
+                exec.exec().await?;
+            }
         }
 
         if message_ids.len() == 1 {
