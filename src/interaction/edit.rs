@@ -68,7 +68,7 @@ impl<'ctx> Handler<'ctx> {
         for id in messages.ok()? {
             let message = self.cache.message(id).ok()?;
             let content = message.content();
-            if content.len() >= 2000 {
+            if content.len() >= 2000 || content.is_empty() {
                 continue;
             }
             message_options.push(SelectMenuOption {
