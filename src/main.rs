@@ -68,13 +68,13 @@ impl Context {
 
     #[allow(unused_must_use, clippy::print_stderr, clippy::use_debug)]
     async fn handle_error(&self, error: anyhow::Error) {
-        let mut err_msg = format!("an error occurred: {error:?}");
+        let mut err_msg = format!("\n**an error occurred:**\n{error:?}");
 
         if let Err(err) = self.message_owner(&err_msg).await {
-            writeln!(err_msg, "couldn't send the error: {err:?}");
+            writeln!(err_msg, "\n**couldn't send the error:**\n{err:?}");
 
             if let Err(e) = self.message_owner("an error occurred :(").await {
-                writeln!(err_msg, "couldn't inform the owner: {e:?}");
+                writeln!(err_msg, "\n**couldn't inform the owner:**\n{e:?}");
             }
 
             if let Err(e) = File::options()
@@ -82,7 +82,7 @@ impl Context {
                 .append(true)
                 .open("edit_any_message_bot_errors.txt")
             {
-                writeln!(err_msg, "couldn't write the error to file: {e:?}");
+                writeln!(err_msg, "\n**couldn't write the error to file:**\n{e:?}");
 
                 eprintln!("{err_msg}");
             }
