@@ -177,7 +177,7 @@ impl<'ctx> Handler<'ctx> {
             let minimal_member = MinimalMember::from_cached_member(&member, &user);
             let minimal_webhook = MinimalWebhook::try_from(webhook.value())?;
             let exec = minimal_webhook
-                .execute_as_member(&self.http, thread_id, &minimal_member)
+                .execute_as_member(&self.http, thread_id, &minimal_member)?
                 .content(if id == &edit_message_id {
                     &input.value
                 } else {
@@ -192,7 +192,7 @@ impl<'ctx> Handler<'ctx> {
                         .nick
                         .as_ref()
                         .unwrap_or(&interaction_member.user.as_ref().ok()?.name)
-                ))
+                ))?
                 .exec()
                 .await?;
             } else {

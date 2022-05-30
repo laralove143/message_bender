@@ -10,26 +10,22 @@ license = "MIT"
 edition = "2021"
 
 [dependencies]
-twilight-gateway = { version = "0.10", default-features = false, features = [
-    #    "simd-json",
+twilight-gateway = { version = "0.11", default-features = false, features = [
     "rustls-native-roots",
     "zlib-simd",
-    "tracing",
 ] }
-twilight-http = { version = "0.10", default-features = false, features = [
+twilight-http = { version = "0.11", default-features = false, features = [
     "decompression",
-    #    "simd-json",
     "rustls-native-roots",
     "trust-dns",
-    "tracing",
 ] }
-twilight-model = { version = "0.10" }
-twilight-cache-inmemory = { version = "0.10", features = [
+twilight-model = { version = "0.11" }
+twilight-cache-inmemory = { version = "0.11", features = [
     "permission-calculator",
 ] }
-twilight-util = { version = "0.10", features = ["builder"] }
-twilight-interactions = "0.10"
-twilight-webhook = "0.10"
+twilight-util = { version = "0.11", features = ["builder"] }
+twilight-interactions = "0.11"
+twilight-webhook = "0.11"
 
 tokio = { version = "1.17", features = ["rt-multi-thread", "macros"] }
 futures-util = "0.3"
