@@ -9,11 +9,12 @@
 
 mod interaction;
 
-use std::{fmt::Write, fs::File, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::IntoResult;
 use futures_util::StreamExt;
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
+use twilight_error::ErrorHandler;
 use twilight_gateway::{Cluster, EventTypeFlags};
 use twilight_http::Client;
 use twilight_model::{
@@ -23,7 +24,7 @@ use twilight_model::{
     },
     guild::Guild,
     id::{
-        marker::{ApplicationMarker, ChannelMarker, GuildMarker, UserMarker},
+        marker::{ApplicationMarker, GuildMarker, UserMarker},
         Id,
     },
 };
@@ -35,13 +36,13 @@ pub struct Context {
     webhooks_cache: WebhooksCache,
     application_id: Id<ApplicationMarker>,
     user_id: Id<UserMarker>,
-    owner_channel_id: Id<ChannelMarker>,
+    error_handler: ErrorHandler,
 }
 
 impl Context {
     async fn handle_event(self: Arc<Self>, event: Event) {
         if let Err(err) = self._handle_event(event).await {
-            self.handle_error(err).await;
+            self.error_handler.handle(&self.http, err).await;
         }
     }
 
@@ -62,44 +63,10 @@ impl Context {
             )
             .await
         {
-            self.handle_error(err.into()).await;
+            self.error_handler.handle(&self.http, err).await;
         }
     }
 
-    #[allow(unused_must_use, clippy::print_stderr, clippy::use_debug)]
-    async fn handle_error(&self, error: anyhow::Error) {
-        let mut err_msg = format!("\n**an error occurred:**\n{error:?}");
-
-        if let Err(err) = self.message_owner(&err_msg).await {
-            writeln!(err_msg, "\n**couldn't send the error:**\n{err:?}");
-
-            if let Err(e) = self.message_owner("an error occurred :(").await {
-                writeln!(err_msg, "\n**couldn't inform the owner:**\n{e:?}");
-            }
-
-            if let Err(e) = File::options()
-                .create(true)
-                .append(true)
-                .open("edit_any_message_bot_errors.txt")
-            {
-                writeln!(err_msg, "\n**couldn't write the error to file:**\n{e:?}");
-
-                eprintln!("{err_msg}");
-            }
-        }
-    }
-
-    async fn message_owner(&self, message: &str) -> Result<(), anyhow::Error> {
-        self.http
-            .create_message(self.owner_channel_id)
-            .content(message)?
-            .exec()
-            .await?;
-
-        Ok(())
-    }
-
-    #[allow(clippy::wildcard_enum_match_arm)]
     pub fn interaction_handler(
         &self,
         interaction: &mut Interaction,
@@ -169,13 +136,6 @@ async fn main() -> Result<(), anyhow::Error> {
         .await?;
     let application_id = application.id;
     let user_id = http.current_user().exec().await?.model().await?.id;
-    let owner_channel_id = http
-        .create_private_channel(application.owner.ok()?.id)
-        .exec()
-        .await?
-        .model()
-        .await?
-        .id;
 
     let cache = InMemoryCache::builder()
         .resource_types(resource_types)
@@ -184,13 +144,23 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let webhooks_cache = WebhooksCache::new();
 
+    let mut error_handler = ErrorHandler::new();
+    error_handler.file("edit_errors.txt".into()).channel(
+        http.create_private_channel(application.owner.ok()?.id)
+            .exec()
+            .await?
+            .model()
+            .await?
+            .id,
+    );
+
     let ctx = Arc::new(Context {
         http,
         cache,
         webhooks_cache,
         application_id,
         user_id,
-        owner_channel_id,
+        error_handler,
     });
 
     ctx.create_commands(test_guild_id).await?;

@@ -26,6 +26,7 @@ twilight-cache-inmemory = { version = "0.11", features = [
 twilight-util = { version = "0.11", features = ["builder"] }
 twilight-interactions = "0.11"
 twilight-webhook = "0.11"
+twilight-error = "0.11"
 
 tokio = { version = "1.17", features = ["rt-multi-thread", "macros"] }
 futures-util = "0.3"
