@@ -145,14 +145,16 @@ async fn main() -> Result<(), anyhow::Error> {
     let webhooks_cache = WebhooksCache::new();
 
     let mut error_handler = ErrorHandler::new();
-    error_handler.file("edit_errors.txt".into()).channel(
-        http.create_private_channel(application.owner.ok()?.id)
-            .exec()
-            .await?
-            .model()
-            .await?
-            .id,
-    );
+    error_handler
+        .file("edit_any_message_bot_errors.txt".into())
+        .channel(
+            http.create_private_channel(application.owner.ok()?.id)
+                .exec()
+                .await?
+                .model()
+                .await?
+                .id,
+        );
 
     let ctx = Arc::new(Context {
         http,
