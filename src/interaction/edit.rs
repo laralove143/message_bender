@@ -164,7 +164,7 @@ impl<'ctx> Handler<'ctx> {
 
         for id in message_ids.iter().rev() {
             let message = self.cache.message(*id).ok()?;
-            if message.webhook_id().is_some() {
+            if message.webhook_id().is_some() || message.content().is_empty() {
                 continue;
             }
             let author_id = message.author();
