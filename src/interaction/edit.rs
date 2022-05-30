@@ -178,26 +178,23 @@ impl<'ctx> Handler<'ctx> {
             let minimal_webhook = MinimalWebhook::try_from(webhook.value())?;
             let exec = minimal_webhook
                 .execute_as_member(&self.http, thread_id, &minimal_member)?
-                .content(if id == &edit_message_id {
-                    &input.value
-                } else {
-                    message.content()
-                })?;
+                .content(message.content())?;
             if id == &edit_message_id {
                 let interaction_member = modal.member.as_ref().ok()?;
-                exec.username(&format!(
-                    "{} (edited by {})",
-                    member.nick().unwrap_or(&user.name),
-                    interaction_member
-                        .nick
-                        .as_ref()
-                        .unwrap_or(&interaction_member.user.as_ref().ok()?.name)
-                ))?
-                .exec()
-                .await?;
+                exec.content(&input.value)?
+                    .username(&format!(
+                        "{} (edited by {})",
+                        member.nick().unwrap_or(&user.name),
+                        interaction_member
+                            .nick
+                            .as_ref()
+                            .unwrap_or(&interaction_member.user.as_ref().ok()?.name)
+                    ))?
+                    .exec()
+                    .await?;
             } else {
                 exec.exec().await?;
-            }
+            };
         }
 
         if message_ids.len() == 1 {
