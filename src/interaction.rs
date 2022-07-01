@@ -2,26 +2,24 @@ pub mod edit;
 
 use std::{mem, ops::Deref};
 
-use anyhow::{anyhow, IntoResult};
+use anyhow::anyhow;
 use thiserror::Error;
 use twilight_http::Client;
 use twilight_interactions::command::CreateCommand;
 use twilight_model::{
     application::{
-        component::Component,
-        interaction::{
-            modal::ModalSubmitInteraction, ApplicationCommand, Interaction, InteractionType,
-            MessageComponentInteraction,
-        },
+        command::CommandType,
+        interaction::{modal::ModalSubmitInteraction, ApplicationCommand, Interaction},
     },
     channel::message::MessageFlags,
-    guild::{PartialMember, Permissions},
-    http::interaction::{InteractionResponse, InteractionResponseData, InteractionResponseType},
+    guild::Permissions,
+    http::interaction::{InteractionResponse, InteractionResponseType},
     id::{
         marker::{ApplicationMarker, ChannelMarker, GuildMarker, InteractionMarker},
         Id,
     },
 };
+use twilight_util::builder::InteractionResponseDataBuilder;
 
 use crate::Context;
 
@@ -29,9 +27,6 @@ use crate::Context;
 enum Error {
     #[error("{0}")]
     Edit(#[from] edit::Error),
-    #[error("you don't have these required permissions:\n**{}**",
-    format!("{:#?}", .0).to_lowercase().replace('_', " "))]
-    UserMissingPermissions(Permissions),
     #[error("please give me these permissions first:\n**{}**",
     format!("{:#?}", .0).to_lowercase().replace('_', " "))]
     SelfMissingPermissions(Permissions),
@@ -40,7 +35,6 @@ enum Error {
 struct UpdateResponse<'res> {
     handler: &'res Handler<'res>,
     content: Option<&'res str>,
-    components: Option<&'res [Component]>,
 }
 
 impl<'res> UpdateResponse<'res> {
@@ -50,7 +44,6 @@ impl<'res> UpdateResponse<'res> {
             .interaction(self.handler.application_id)
             .update_response(&self.handler.token)
             .content(self.content)?
-            .components(self.components)?
             .exec()
             .await?;
 
@@ -59,11 +52,6 @@ impl<'res> UpdateResponse<'res> {
 
     const fn content(mut self, content: &'res str) -> Self {
         self.content = Some(content);
-        self
-    }
-
-    const fn components(mut self, components: &'res [Component]) -> Self {
-        self.components = Some(components);
         self
     }
 }
@@ -90,11 +78,8 @@ impl<'ctx> Handler<'ctx> {
     ) -> Result<Handler<'ctx>, anyhow::Error> {
         let (token, id) = match interaction {
             Interaction::ApplicationCommand(cmd) => (mem::take(&mut cmd.token), cmd.id),
-            Interaction::MessageComponent(component) => {
-                (mem::take(&mut component.token), component.id)
-            }
             Interaction::ModalSubmit(modal) => (mem::take(&mut modal.token), modal.id),
-            _ => return Err(anyhow!("type of the interaction to handle is unknown")),
+            _ => return Err(anyhow!("unknown interaction type: {interaction:#?}")),
         };
 
         Ok(Self { ctx, id, token })
@@ -102,18 +87,14 @@ impl<'ctx> Handler<'ctx> {
 
     #[allow(clippy::wildcard_enum_match_arm, clippy::option_if_let_else)]
     pub async fn handle(&self, interaction: Interaction) -> Result<(), anyhow::Error> {
-        self.defer(interaction.kind()).await?;
-
         if let Err(err) = match interaction {
             Interaction::ApplicationCommand(cmd) => self.handle_command(*cmd).await,
-            Interaction::MessageComponent(component) => self.handle_component(*component).await,
             Interaction::ModalSubmit(modal) => self.handle_modal_submit(*modal).await,
-            _ => return Err(anyhow!("unknown interaction: {interaction:#?}")),
+            _ => return Err(anyhow!("unknown interaction type: {interaction:#?}")),
         } {
             return if let Some(user_err) = err.downcast_ref::<Error>() {
                 self.update_response()
                     .content(&user_err.to_string())
-                    .components(&[])
                     .exec()
                     .await?;
                 Ok(())
@@ -123,7 +104,6 @@ impl<'ctx> Handler<'ctx> {
                         "an error happened :( i let my developer know hopefully they'll fix it \
                          soon!",
                     )
-                    .components(&[])
                     .exec()
                     .await?;
                 Err(err)
@@ -135,18 +115,12 @@ impl<'ctx> Handler<'ctx> {
 
     async fn handle_command(&self, command: ApplicationCommand) -> Result<(), anyhow::Error> {
         match command.data.name.as_str() {
-            "edit" => self.edit().command(command).await,
+            "edit" => match command.data.kind {
+                CommandType::Message => self.edit().command(command).await,
+                CommandType::ChatInput => self.edit().chat_input_command().await,
+                CommandType::User => Err(anyhow!("unknown command type: {command:#?}")),
+            },
             _ => Err(anyhow!("unknown command: {command:#?}")),
-        }
-    }
-
-    async fn handle_component(
-        &self,
-        component: MessageComponentInteraction,
-    ) -> Result<(), anyhow::Error> {
-        match component.data.custom_id.as_str() {
-            "selected_message" => self.edit().message_select(component).await,
-            _ => Err(anyhow!("unknown component: {component:#?}")),
         }
     }
 
@@ -161,30 +135,16 @@ impl<'ctx> Handler<'ctx> {
     }
 
     #[allow(clippy::wildcard_enum_match_arm)]
-    async fn defer(&self, kind: InteractionType) -> Result<(), anyhow::Error> {
-        let response_type = match kind {
-            InteractionType::ApplicationCommand => {
-                InteractionResponseType::DeferredChannelMessageWithSource
-            }
-            InteractionType::ModalSubmit => InteractionResponseType::DeferredUpdateMessage,
-            _ => return Ok(()),
-        };
-
-        self.http
-            .interaction(self.application_id)
-            .create_response(
-                self.id,
-                &self.token,
-                &InteractionResponse {
-                    kind: response_type,
-                    data: Some(InteractionResponseData {
-                        flags: Some(MessageFlags::EPHEMERAL),
-                        ..InteractionResponseData::default()
-                    }),
-                },
-            )
-            .exec()
-            .await?;
+    async fn defer(&self) -> Result<(), anyhow::Error> {
+        self.create_response(&InteractionResponse {
+            kind: InteractionResponseType::DeferredChannelMessageWithSource,
+            data: Some(
+                InteractionResponseDataBuilder::new()
+                    .flags(MessageFlags::EPHEMERAL)
+                    .build(),
+            ),
+        })
+        .await?;
 
         Ok(())
     }
@@ -193,7 +153,6 @@ impl<'ctx> Handler<'ctx> {
         UpdateResponse {
             handler: self,
             content: None,
-            components: None,
         }
     }
 
@@ -236,7 +195,7 @@ pub async fn create_commands(
     test_guild_id: Option<Id<GuildMarker>>,
 ) -> Result<(), anyhow::Error> {
     let interaction_client = http.interaction(application_id);
-    let commands = [edit::Command::create_command().into()];
+    let commands = [edit::build(), edit::ChatInput::create_command().into()];
 
     match test_guild_id {
         Some(id) => interaction_client.set_guild_commands(id, &commands).exec(),
@@ -245,17 +204,4 @@ pub async fn create_commands(
     .await?;
 
     Ok(())
-}
-
-fn check_member_permissions(
-    member: &PartialMember,
-    required: Permissions,
-) -> Result<(), anyhow::Error> {
-    let missing_permissions = required - member.permissions.ok()?;
-
-    if missing_permissions.is_empty() {
-        Ok(())
-    } else {
-        Err(Error::UserMissingPermissions(missing_permissions).into())
-    }
 }

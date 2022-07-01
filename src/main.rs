@@ -28,7 +28,7 @@ use twilight_model::{
         Id,
     },
 };
-use twilight_webhook::cache::Cache as WebhooksCache;
+use twilight_webhook::cache::WebhooksCache;
 
 pub struct Context {
     http: Client,
@@ -88,10 +88,11 @@ impl Context {
 async fn main() -> Result<(), anyhow::Error> {
     let intents = Intents::MESSAGE_CONTENT
         | Intents::GUILD_MESSAGES
-        | Intents::GUILDS
-        | Intents::GUILD_MEMBERS;
+        | Intents::GUILD_MESSAGE_REACTIONS
+        | Intents::GUILDS;
     let event_types = EventTypeFlags::INTERACTION_CREATE
         | EventTypeFlags::GUILD_MESSAGES
+        | EventTypeFlags::GUILD_MESSAGE_REACTIONS
         | EventTypeFlags::GUILDS
         | EventTypeFlags::THREAD_CREATE
         | EventTypeFlags::THREAD_UPDATE
@@ -102,6 +103,7 @@ async fn main() -> Result<(), anyhow::Error> {
         | EventTypeFlags::GUILD_MEMBERS
         | EventTypeFlags::MEMBER_CHUNK;
     let resource_types = ResourceType::MESSAGE
+        | ResourceType::REACTION
         | ResourceType::GUILD
         | ResourceType::CHANNEL
         | ResourceType::MEMBER
