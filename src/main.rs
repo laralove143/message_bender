@@ -107,6 +107,7 @@ async fn main() -> Result<(), anyhow::Error> {
         | ResourceType::GUILD
         | ResourceType::CHANNEL
         | ResourceType::MEMBER
+        | ResourceType::USER
         | ResourceType::ROLE;
 
     let test_guild_id: Option<Id<GuildMarker>> =
