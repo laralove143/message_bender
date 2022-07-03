@@ -202,10 +202,11 @@ impl<'ctx> Handler<'ctx> {
                             .as_ref()
                             .unwrap_or(&interaction_member.user.as_ref().ok()?.name)
                     ))?
+                    .wait()
                     .exec()
                     .await?;
             } else {
-                exec.exec().await?;
+                exec.wait().exec().await?;
             };
         }
 
