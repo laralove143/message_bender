@@ -118,7 +118,7 @@ impl<'ctx> Handler<'ctx> {
             "edit" => match command.data.kind {
                 CommandType::Message => self.edit().command(command).await,
                 CommandType::ChatInput => self.edit().chat_input_command().await,
-                CommandType::User => Err(anyhow!("unknown command type: {command:#?}")),
+                _ => Err(anyhow!("unknown command type: {command:#?}")),
             },
             _ => Err(anyhow!("unknown command: {command:#?}")),
         }
