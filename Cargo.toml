@@ -1,5 +1,5 @@
 [package]
-name = "edit-any-message-discord-bot"
+name = "message_bender"
 description = "a discord bot that lets you edit other people's messages"
 repository = "https://github.com/laralove143/edit-any-message-discord-bot"
 version = "0.1.0"
