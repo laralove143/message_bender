@@ -33,3 +33,4 @@ futures-util = "0.3"
 anyhow = { git = "https://github.com/laralove143/anyhow" }
 thiserror = "1.0"
 dashmap = "5.2"
+dotenvy = "0.15"
