@@ -9,12 +9,10 @@
 
 mod interaction;
 
-use std::sync::Arc;
+use std::{env, sync::Arc};
 
-use anyhow::IntoResult;
 use futures_util::StreamExt;
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
-use twilight_error::ErrorHandler;
 use twilight_gateway::{Cluster, EventTypeFlags};
 use twilight_http::Client;
 use twilight_model::{
@@ -36,13 +34,14 @@ pub struct Context {
     webhooks_cache: WebhooksCache,
     application_id: Id<ApplicationMarker>,
     user_id: Id<UserMarker>,
-    error_handler: ErrorHandler,
 }
+
+const TEST_GUILD_ID: Id<GuildMarker> = Id::new(903_367_565_349_384_202);
 
 impl Context {
     async fn handle_event(self: Arc<Self>, event: Event) {
         if let Err(err) = self._handle_event(event).await {
-            self.error_handler.handle(&self.http, err).await;
+            println!("{err:#?}");
         }
     }
 
@@ -63,7 +62,7 @@ impl Context {
             )
             .await
         {
-            self.error_handler.handle(&self.http, err).await;
+            println!("{err:#?}");
         }
     }
 
@@ -74,11 +73,8 @@ impl Context {
         interaction::Handler::new(self, interaction)
     }
 
-    pub async fn create_commands(
-        &self,
-        test_guild_id: Option<Id<GuildMarker>>,
-    ) -> Result<(), anyhow::Error> {
-        interaction::create_commands(&self.http, self.application_id, test_guild_id).await?;
+    pub async fn create_commands(&self) -> Result<(), anyhow::Error> {
+        interaction::create_commands(&self.http, self.application_id).await?;
 
         Ok(())
     }
@@ -87,7 +83,7 @@ impl Context {
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     dotenvy::dotenv()?;
-    
+
     let intents = Intents::MESSAGE_CONTENT
         | Intents::GUILD_MESSAGES
         | Intents::GUILD_MESSAGE_REACTIONS
@@ -112,15 +108,7 @@ async fn main() -> Result<(), anyhow::Error> {
         | ResourceType::USER
         | ResourceType::ROLE;
 
-    let test_guild_id: Option<Id<GuildMarker>> =
-        option_env!("TEST_GUILD_ID").and_then(|id| id.parse().ok());
-
-    let token = test_guild_id
-        .is_some()
-        .then(|| option_env!("TEST_BOT_TOKEN"))
-        .unwrap_or(option_env!("EDIT_BOT_TOKEN"))
-        .ok()?
-        .to_owned();
+    let token = env::var("BOT_TOKEN")?;
 
     let (cluster, mut events) = Cluster::builder(token.clone(), intents)
         .event_types(event_types)
@@ -149,28 +137,15 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let webhooks_cache = WebhooksCache::new();
 
-    let mut error_handler = ErrorHandler::new();
-    error_handler
-        .file("edit_any_message_bot_errors.txt".into())
-        .channel(
-            http.create_private_channel(application.owner.ok()?.id)
-                .exec()
-                .await?
-                .model()
-                .await?
-                .id,
-        );
-
     let ctx = Arc::new(Context {
         http,
         cache,
         webhooks_cache,
         application_id,
         user_id,
-        error_handler,
     });
 
-    ctx.create_commands(test_guild_id).await?;
+    ctx.create_commands().await?;
 
     while let Some((shard_id, event)) = events.next().await {
         ctx.cache.update(&event);

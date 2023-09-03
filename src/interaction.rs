@@ -15,13 +15,13 @@ use twilight_model::{
     guild::Permissions,
     http::interaction::{InteractionResponse, InteractionResponseType},
     id::{
-        marker::{ApplicationMarker, ChannelMarker, GuildMarker, InteractionMarker},
+        marker::{ApplicationMarker, ChannelMarker, InteractionMarker},
         Id,
     },
 };
 use twilight_util::builder::InteractionResponseDataBuilder;
 
-use crate::Context;
+use crate::{Context, TEST_GUILD_ID};
 
 #[derive(Error, Debug)]
 enum Error {
@@ -192,16 +192,18 @@ impl<'ctx> Handler<'ctx> {
 pub async fn create_commands(
     http: &Client,
     application_id: Id<ApplicationMarker>,
-    test_guild_id: Option<Id<GuildMarker>>,
 ) -> Result<(), anyhow::Error> {
     let interaction_client = http.interaction(application_id);
     let commands = [edit::build(), edit::ChatInput::create_command().into()];
 
-    match test_guild_id {
-        Some(id) => interaction_client.set_guild_commands(id, &commands).exec(),
-        None => interaction_client.set_global_commands(&commands).exec(),
-    }
-    .await?;
+    interaction_client
+        .set_guild_commands(TEST_GUILD_ID, &commands)
+        .exec()
+        .await?;
+    interaction_client
+        .set_global_commands(&commands)
+        .exec()
+        .await?;
 
     Ok(())
 }

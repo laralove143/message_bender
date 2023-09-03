@@ -1,6 +1,6 @@
 use std::{fmt::Write, ops::Deref};
 
-use anyhow::IntoResult;
+use anyhow::Context;
 use thiserror::Error;
 use twilight_cache_inmemory::{model::CachedMessage, Reference};
 use twilight_interactions::command::{CommandModel, CreateCommand};
@@ -91,11 +91,11 @@ impl<'ctx> Handler<'ctx> {
         let message = command
             .data
             .resolved
-            .ok()?
+            .context("command data doesn't have resolved data")?
             .messages
             .into_values()
             .next()
-            .ok()?;
+            .context("command data doesn't have a message")?;
 
         if self.cache.message(message.id).is_none() {
             return Err(super::Error::Edit(Error::NoCachedMessages).into());
@@ -137,13 +137,28 @@ impl<'ctx> Handler<'ctx> {
     ) -> Result<(), anyhow::Error> {
         self.defer().await?;
 
-        let channel = self.cache.channel(modal.channel_id).ok()?;
+        let channel = self
+            .cache
+            .channel(modal.channel_id)
+            .context("channel not cached")?;
         let (channel_id, thread_id) = if channel.kind.is_thread() {
-            (channel.parent_id.ok()?, Some(channel.id))
+            (
+                channel
+                    .parent_id
+                    .context("thread channel doesn't have a parent")?,
+                Some(channel.id),
+            )
         } else {
             (channel.id, None)
         };
-        let input = modal.data.components.pop().ok()?.components.pop().ok()?;
+        let input = modal
+            .data
+            .components
+            .pop()
+            .context("modal doesn't have any components")?
+            .components
+            .pop()
+            .context("modal action row doesn't have any components")?;
         let webhook = self
             .webhooks_cache
             .get_infallible(&self.http, channel_id, "any message editor")
@@ -154,10 +169,10 @@ impl<'ctx> Handler<'ctx> {
         let unfiltered = self
             .cache
             .channel_messages(modal.channel_id)
-            .ok()?
+            .context("channel messages aren't cached")?
             .take_while(|&id| id != edit_message_id)
             .chain([edit_message_id].into_iter())
-            .map(|id| self.cache.message(id).ok())
+            .map(|id| self.cache.message(id).context("message is not cached"))
             .collect::<Result<Vec<Reference<_, _>>, _>>()?;
         let messages: Vec<_> = unfiltered
             .iter()
@@ -176,9 +191,17 @@ impl<'ctx> Handler<'ctx> {
             let author_id = message.author();
             let member = self
                 .cache
-                .member(message.guild_id().ok()?, author_id)
-                .ok()?;
-            let user = self.cache.user(author_id).ok()?;
+                .member(
+                    message
+                        .guild_id()
+                        .context("message doesn't have a guild id")?,
+                    author_id,
+                )
+                .context("member is not cached")?;
+            let user = self
+                .cache
+                .user(author_id)
+                .context("message author user is not cached")?;
 
             let mut content = message.content().to_owned();
             #[allow(unused_must_use)]
@@ -192,15 +215,21 @@ impl<'ctx> Handler<'ctx> {
                 .execute_as_member(&self.http, thread_id, &minimal_member)?
                 .content(&content)?;
             if message.id() == edit_message_id {
-                let interaction_member = modal.member.as_ref().ok()?;
+                let interaction_member = modal
+                    .member
+                    .as_ref()
+                    .context("modal interaction doesn't have a member")?;
                 exec.content(&input.value)?
                     .username(&format!(
                         "{} (edited by {})",
                         member.nick().unwrap_or(&user.name),
-                        interaction_member
-                            .nick
-                            .as_ref()
-                            .unwrap_or(&interaction_member.user.as_ref().ok()?.name)
+                        interaction_member.nick.as_ref().unwrap_or(
+                            &interaction_member
+                                .user
+                                .as_ref()
+                                .context("modal interaction member doesn't include user info")?
+                                .name
+                        )
                     ))?
                     .wait()
                     .exec()
@@ -212,7 +241,10 @@ impl<'ctx> Handler<'ctx> {
 
         if messages.len() == 1 {
             self.http
-                .delete_message(modal.channel_id, messages.first().ok()?.id())
+                .delete_message(
+                    modal.channel_id,
+                    messages.first().context("list of messages is empty")?.id(),
+                )
                 .exec()
         } else {
             self.http
