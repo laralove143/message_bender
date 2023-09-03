@@ -86,6 +86,8 @@ impl Context {
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    dotenvy::dotenv()?;
+    
     let intents = Intents::MESSAGE_CONTENT
         | Intents::GUILD_MESSAGES
         | Intents::GUILD_MESSAGE_REACTIONS
